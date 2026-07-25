@@ -67,6 +67,8 @@ CHANNELS = {
     "ambientocclusion": (("AO", "AmbientOcclusion", "Ao"),  "ambientOcclusion",  "L8",      False, None),
     # ClearCoat mask -> User1 (paintable).
     "user1":           (("User1",),                         "user1",             "L8",      False, "ClearCoatMask"),
+    # _EmissionMap.a -> Emission 呼吸遮罩(emissive 通道只有 RGB,装不下)。
+    "user2":           (("User2",),                         "user2",             "L8",      False, "EmissionBreathMask"),
 }
 
 # Unity texture property -> (destination channel, decode op). These are the
@@ -77,7 +79,7 @@ CHANNEL_SOURCES = {
                           ("specularlevel", OP_CHANNEL_G),
                           ("ambientocclusion", OP_CHANNEL_B),
                           ("roughness", OP_INVERT_A)),
-    "_EmissionMap": (("emissive", OP_COPY_RGB),),
+    "_EmissionMap": (("emissive", OP_COPY_RGB), ("user2", OP_CHANNEL_A)),
     "_BumpMap": (("normal", OP_NORMAL_UNITY),),
     # Hair: RG = diffuse normal (paintable/bakeable), BA = specular normal
     # (a shader sampler -- see TEXTURE_PARAMS).
@@ -135,6 +137,9 @@ FLOAT_DEFAULTS = {
     "_SpecBumpScale": 1.0,
     # characternpr (Standard) 的 _ANISOTROPY_SPECULAR_ON 一套 —— 与下面 hair
     # 的 _AnisotropyValue/_AnisotropyDirX 是两个不同 shader 的不同功能。
+    "_EmissionAlphaBrightBreathSpeed": 1.0,
+    "_EmissionAlphaBrightBreathScaleMin": 0.0,
+    "_EmissionAlphaBrightBreathScaleMax": 1.0,
     "_EnemyHitFlashInnerRadius": 0.0, "_EnemyHitFlashOuterRadius": 2.0,
     "_EnemyHitFlashFresnelBias": 0.0, "_EnemyHitFlashFresnelAffectOpacity": 1.0,
     "_EnemyHitFlashNormalScale": 1.0, "_EnemyHitFlashBrightColorAdjust": 1.0,
@@ -197,6 +202,8 @@ FLOAT_IDENTITY = [
     "_SkinRimOffScale", "_FaceRimOffScale", "_EmotionBlend",
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
+    "_EmissionAlphaBrightBreathSpeed", "_EmissionAlphaBrightBreathScaleMin",
+    "_EmissionAlphaBrightBreathScaleMax",
     "_EnemyHitFlashInnerRadius", "_EnemyHitFlashOuterRadius",
     "_EnemyHitFlashFresnelBias", "_EnemyHitFlashFresnelAffectOpacity",
     "_EnemyHitFlashNormalScale", "_EnemyHitFlashBrightColorAdjust",
@@ -244,6 +251,7 @@ COLOR_IDENTITY = [
     "_MatcapColor", "_EyeHighLightColor", "_EyeScatteringColor",
     "_AnisotropyColor2", "_AnisotropyColorAdditional", "_StylizedFresnelColor",
     "_CustomizeBaseColor", "_CustomizeBaseTintColor", "_CustomizeAddTintColor",
+    "_BaseMapUVSpeed", "_EmissionMapUVSpeed",
     "_EnemyHitFlashBrightColor", "_EnemyHitFlashFresnelColor",
     "_EnemyHitFlashBrightCenter",
     "_HairDarkenParams",
@@ -314,6 +322,7 @@ BOOL_MAP = {
     "u_UseShadowLut":        "_UseShadowLutTex",
     "u_UseEmission":         "_UseEmission",
     "u_ClearCoat":           "_ClearCoat",
+    "_EmissionAlphaBrightBreath": "_EmissionAlphaBrightBreath",
     "u_CustomizeAvatar":     "_AvatarCustomizeEnable",
     "u_MatcapEnvReflection": "_UseMatcap",
     "u_EnemyHitFlash":       "_EnableEnemyHitFlash",

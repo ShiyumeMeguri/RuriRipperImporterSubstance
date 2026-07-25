@@ -133,6 +133,23 @@
     uniform vec4 _EmissionColor;
     //: param custom { "default": 1.0, "label": "自发光亮度 EmissionBrightness", "min": 0.0, "max": 16.0, "group": "4 自发光" }
     uniform float _EmissionBrightness;
+    // 1.4.4 新增:Emission 呼吸。逐像素的"哪里会呼吸"来自 _EmissionMap.a,
+    // 在 Painter 里进 user2 通道(emissive 通道只有 RGB)。
+    //: param custom { "default": false, "label": "自发光呼吸 _EmissionAlphaBrightBreath", "group": "4 自发光" }
+    uniform bool _EmissionAlphaBrightBreath;
+    //: param custom { "default": 1.0, "label": "呼吸速度 BreathSpeed", "min": 0.0, "max": 20.0, "group": "4 自发光" }
+    uniform float _EmissionAlphaBrightBreathSpeed;
+    //: param custom { "default": 0.0, "label": "呼吸最小亮度 BreathScaleMin", "min": 0.0, "max": 8.0, "group": "4 自发光" }
+    uniform float _EmissionAlphaBrightBreathScaleMin;
+    //: param custom { "default": 1.0, "label": "呼吸最大亮度 BreathScaleMax", "min": 0.0, "max": 8.0, "group": "4 自发光" }
+    uniform float _EmissionAlphaBrightBreathScaleMax;
+    // [H7] 引擎通道按 1:1 UV 绘制,滚动 UV 不能作用在 basecolor/emissive 上
+    // (Painter 的通道采样是 sparse_coord,不接受偏移的 UV);这两个速度因此
+    // 只记录、不作用于引擎通道 —— 与 _BaseMap_ST 同一条既有限制。
+    //: param custom { "default": [0.0, 0.0, 0.0, 0.0], "label": "[H7] BaseMap UV 速度(仅记录)", "group": "4 自发光" }
+    uniform vec4 _BaseMapUVSpeed;
+    //: param custom { "default": [0.0, 0.0, 0.0, 0.0], "label": "[H7] EmissionMap UV 速度(仅记录)", "group": "4 自发光" }
+    uniform vec4 _EmissionMapUVSpeed;
   //- endregion
 
   //- region 渲染设置
@@ -713,6 +730,13 @@
   //-     sampler2D 参数: 参数走原始采样、零色彩管理 = 字节等价, 且参数自带 label 在 shader 面板可辨识。
   //: param auto channel_user1
   uniform SamplerSparse slot_user1_tex;
+
+  //- user2 = Standard: Emission 呼吸遮罩 (_EmissionMap.a, 可绘制)。
+  //- 参考的 Emission 呼吸按 _EmissionMap 的 ALPHA 逐像素选"哪里会呼吸"
+  //- (_3797 = 1 + emis.a * (scale - 1)),而 Painter 的 emissive 通道只有 RGB,
+  //- 所以这一位单独进 user2 —— 与 ClearCoat mask 进 user1 是同一套做法。
+  //: param auto channel_user2
+  uniform SamplerSparse slot_user2_tex;
 //- }
 
 //----------------------------------------------------------------------region 引擎 auto 属性
@@ -1492,7 +1516,21 @@
       // ==== EMISSION ====
       float3 emissionContrib = float3(0.0);
       if (u_UseEmission) {
-          emissionContrib = emissionTex * _EmissionColor.rgb * _EmissionBrightness * alphaPremul;
+          // _3797:呼吸只按 _EmissionMap.a(→ user2)逐像素生效,
+          //   breath = 1 + mask * (lerp(Min, Max, sin(t*Speed)*0.5+0.5) - 1)
+          float emisBreath = 1.0;
+          if (_EmissionAlphaBrightBreath) {
+              float breathMask = slot_user2_tex.is_set
+                               ? textureSparse(slot_user2_tex, inputs.sparse_coord).r : 1.0;
+              float breathPhase = mad(sin(f_VFXTime * _EmissionAlphaBrightBreathSpeed), 0.5, 0.5);
+              float breathScale = mad(breathPhase,
+                                      _EmissionAlphaBrightBreathScaleMax
+                                      - _EmissionAlphaBrightBreathScaleMin,
+                                      _EmissionAlphaBrightBreathScaleMin);
+              emisBreath = mad(breathMask, breathScale - 1.0, 1.0);
+          }
+          emissionContrib = emissionTex * _EmissionColor.rgb * _EmissionBrightness
+                            * emisBreath * alphaPremul;
       }
       if (u_UseParallax) {
           emissionContrib += baseAlpha * parallaxSample * _ParallaxColor.rgb * alphaPremul;
