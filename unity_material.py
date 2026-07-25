@@ -149,6 +149,7 @@ FLOAT_DEFAULTS = {
     "_SpecBumpScale": 1.0,
     # characternpr (Standard) 的 _ANISOTROPY_SPECULAR_ON 一套 —— 与下面 hair
     # 的 _AnisotropyValue/_AnisotropyDirX 是两个不同 shader 的不同功能。
+    "_AlphaClipThreshold": 0.5, "_ViewFade": 0.0,
     "_DissolveEdgeSharp": 1.0, "_DissolveScheduleOffset": 0.0,
     "_DissolveEmissiveEdge": 0.0, "_CutOffPosY": 0.0,
     "_PuppetMaskLocationDown": 0.1, "_PuppetMaskLocationTop": 0.5,
@@ -224,6 +225,7 @@ FLOAT_IDENTITY = [
     "_SkinRimOffScale", "_FaceRimOffScale", "_EmotionBlend",
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
+    "_AlphaClipThreshold", "_ViewFade",
     "_DissolveEdgeSharp", "_DissolveScheduleOffset", "_DissolveEmissiveEdge",
     "_CutOffPosY",
     "_PuppetMaskLocationDown", "_PuppetMaskLocationTop", "_PuppetMaskSmooth",

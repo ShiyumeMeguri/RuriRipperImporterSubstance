@@ -155,8 +155,12 @@
   //- region 渲染设置
     //: param custom { "default": false, "label": "半透明混合 AlphaBlend", "group": "5 渲染设置" }
     uniform_specialization bool u_AlphaBlend;
-    //: param custom { "default": 0.0, "label": "透明裁切阈值 AlphaClip", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
-    uniform float f_AlphaClip;
+    // 参考的 _AlphaClipThreshold(Range(0,1) 默认 0.5)—— 是真材质属性,不是手填。
+    //: param custom { "default": 0.5, "label": "透明裁切阈值 AlphaClipThreshold", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
+    uniform float _AlphaClipThreshold;
+    // ViewFade:掠射角按 |dot(N,V)| 淡出 alpha(参考 _1811/_1816/_1824)。
+    //: param custom { "default": 0.0, "label": "视角淡出 ViewFade", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
+    uniform float _ViewFade;
     //: param custom { "default": 0.0, "label": "AlphaPremultiply", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
     uniform float _AlphaPremultiply;
     //: param custom { "default": true, "label": "EndField Tonemap ACES_modified (SP显示设置Tone mapping请选Linear)", "group": "5 渲染设置" }
@@ -3538,7 +3542,20 @@
           float3 albedo = baseCol * _BaseColor.rgb;
           float baseAlpha = baseAlphaTex * _BaseColor.a;
           color = shadeHair(inputs, inputs.position, inputs.normal, tangentWS, faceSign, albedo, baseAlpha);
-          outAlpha = u_AlphaBlend ? baseAlphaTex : 1.0; // 原: (_SurfaceType==1) ? baseSample.a : 1
+          // 参考 _1824:alpha = smoothstep(viewFade) * ExtraAlphaMask.a * _BaseColor.a
+          float vfAlpha = 1.0;
+          if (_ViewFade > 0.0) {
+              float3 vfN = normalize(inputs.normal);
+              float3 vfV = normalize(camera_pos - inputs.position);
+              float vfBias = 0.2 - _ViewFade;                                  // _1811
+              float vfT = clamp((vfBias + min(abs(dot(vfV, vfN)), 1.0))
+                                / (vfBias + _ViewFade), 0.0, 1.0);             // _1816
+              vfAlpha = (vfT * vfT) * mad(vfT, -2.0, 3.0);
+          }
+          if (u_ExtraAlphaMask) {
+              vfAlpha *= texture(_ExtraAlphaMask, GetBaseUV(inputs)).a;         // _349.w
+          }
+          outAlpha = (u_AlphaBlend ? baseAlphaTex : 1.0) * vfAlpha; // 原: (_SurfaceType==1) ? baseSample.a : 1
       }
       else if (u_CharaPart == 4) {
           // ---- Fur ([H10] 单壳层预览) ----
@@ -3574,7 +3591,7 @@
           alphaOutput(outAlpha);
       } else if (!skipDefaultClip) {
           float clipA = baseAlphaTex * _BaseColor.a;
-          if (clipA < f_AlphaClip) discard;
+          if (clipA < _AlphaClipThreshold) discard;
       }
 
       // ---- EndField 后处理 tonemap (HGRP ACES_modified; 屏幕链对所有 part 一致) ----
