@@ -128,7 +128,6 @@ def prepare(job, progress=None):
         job.report.append("!! " + warning)
     job.report.append("textures: {0} written, {1} reused, into {2}".format(
         baker.written, baker.reused, job.texture_dir()))
-
     job.seconds = time.time() - started
     return job
 

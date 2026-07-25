@@ -27,8 +27,15 @@
        Face SDF 基轴 (源=O2W 列0/列2) 直接由 _FaceRight/_FaceForward 以 SP 世界空间输入
        (±1, rip FBX 实测面朝 -Z ⇒ Unity .mat 轴 Z 取反)，faceUp=cross(right,fwd) 重建列1。
   [H5] ApplyCustomAO（Fix 沙盒自定义 AO）：跳过。
-  [H6] 反射立方图：_CharMaxCubemap(Standard) 与 unity_SpecCube0(Fur) 都 → SP 环境 envSampleLOD()。
-       mip 公式不变；环境内容随 SP 环境贴图而变（建议挂 CharCubemap.exr）。
+  [H6] 反射立方图 → SP 环境 envSampleLOD()。整条环境反射链与参考逐项一致
+       (b423 对拍过: envBRDF 有理式、mip=log2(max(rough,0.001))*1.2+5、
+        reflBoost=(1-dfg)/dfg、SpecRamp 后的 specColor 进 envBRDF), 但**输入源**
+       不是一回事: 参考采的是引擎预积分、低分辨率、重度模糊的散射立方图,
+       Painter 采的是真 HDRI —— 同一个 mip 号在它上面清晰得多, 于是周围环境
+       会被实打实反射出来。这是 Painter 侧无法消除的结构差异, 不是移植误差。
+       强度统一交给 _CubemapIntensity(默认 1 = 不改动参考结果), 它是纯 Painter
+       侧旋钮(参考 8 份 .shader 都没有这个属性), 因此**不随导入被覆写**,
+       调过一次就一直保留。Standard / Hair / ClearCoat 三条环境路径都受它控制。
   [H7] 引擎通道按 1:1 UV 绘制，不支持 _BaseMap_ST 平铺；_BaseMap_ST 参数只作用于
        自定义贴图参数的 UV 公式（与 Unity 一致）。默认 (1,1,0,0) 时两边完全一致。
   [H8] getTSNormal(sparse_coord)：取 SP 法线通道切线空间法线（替代 Unity DXT5nm 解码）。
@@ -156,7 +163,9 @@
     uniform sampler2D _SpecRampMap;
     //: param custom { "default": 0.0, "label": "Iridescent 模式", "min": 0.0, "max": 1.0, "group": "3 高光Ramp与反射" }
     uniform float _SpecRampIridescentMode;
-    //: param custom { "default": 1.0, "label": "Cubemap/环境反射强度 (仅 Standard)", "min": 0.0, "max": 4.0, "group": "3 高光Ramp与反射" }
+        // [H6] Painter 的环境比游戏那张预积分散射图锐利得多, 环境反射会偏强。
+    // 这根是唯一的补偿旋钮, 且不会被导入覆写。
+//: param custom { "default": 1.0, "label": "[H6] 环境反射强度 Cubemap", "min": 0.0, "max": 4.0, "group": "3 高光Ramp与反射" }
     uniform float _CubemapIntensity;
   //- endregion
 
@@ -3537,7 +3546,7 @@
 
       float cubeAmbInt = ambDiffInt * (clamp(exposure, 0.5, 1.5) * _CharacterParams0.w);
       float3 cubeRefl = cubeSample * envBRDF * (1.0 + reflBoost * specRampEnv);
-      float3 cubemapContrib = cubeAmbInt * cubeRefl * ambCol;
+      float3 cubemapContrib = cubeAmbInt * cubeRefl * ambCol * _CubemapIntensity;
 
       // ==== FINAL ASSEMBLY ====
       float desatFactor = desatAmt * desatAmt + 1.0;

@@ -33,6 +33,7 @@ except ImportError:  # standalone (non-package) testing
 PART_NAMES = {
     0: "Standard", 1: "Face", 2: "Eyes", 3: "Hair",
     4: "Fur", 5: "Eyebrow", 6: "VFX", 7: "OverlayShadow",
+    8: "ShadowReceiver",
 }
 
 # ---------------------------------------------------------------------------
@@ -161,7 +162,7 @@ FLOAT_DEFAULTS = {
     "_BumpScale": 1.0, "_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 0.5,
     "_ShadowColorBrightness": 0.5, "_ShadowColorSaturation": 1.0,
     "_SpecRampIridescentMode": 0.0, "_AlphaPremultiply": 0.0,
-    "_EmissionBrightness": 1.0, "_CubemapIntensity": 1.0,
+    "_EmissionBrightness": 1.0,
     "_SkinRimOffScale": 0.5, "_FaceRimOffScale": 1.0,
     "_EmotionIndex": 0.0, "_EmotionBlend": 1.0,
     "_MatcapNormalScale": 1.0, "_ParallaxScale": 0.3,
@@ -270,7 +271,10 @@ GAMMA_FLOAT_PROPS = ("_Metallic",)
 FLOAT_IDENTITY = [
     "_BumpScale", "_Metallic", "_Specular", "_Smoothness",
     "_ShadowColorBrightness", "_ShadowColorSaturation", "_SpecRampIridescentMode",
-    "_AlphaPremultiply", "_EmissionBrightness", "_CubemapIntensity", "_BackFaceNormalFlip",
+    "_AlphaPremultiply", "_EmissionBrightness", "_BackFaceNormalFlip",
+    # _CubemapIntensity is deliberately absent: it is a Painter-side [H6]
+    # compensation knob, not a reference property, so writing it on every
+    # import would reset whatever the artist dialled in.
     "_SkinRimOffScale", "_FaceRimOffScale", "_EmotionBlend",
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
@@ -281,7 +285,6 @@ FLOAT_IDENTITY = [
     "_FaceDecalSize", "_FaceDecalBrightnessMask", "_FaceDecalMirrorSplit",
     "_FaceDecalCenterX", "_FaceDecalCenterY", "_FaceDecalRotation",
     "_FaceDecalMirrorMode", "_FaceDecalInvertX", "_FaceDecalInvertY",
-    "_HairBrowMaskThreshold",
     "_AlphaClipThreshold", "_ViewFade",
     "_CircleFadeDistance", "_CircleFadeSmoothness",
     "_OutlineColorBrightness", "_OutlineColorSaturation",
