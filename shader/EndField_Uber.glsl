@@ -178,6 +178,45 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region CharacterErosion 侵蚀 (Standard, keyword _CHARACTER_EROSION)
+    // 1.4.4 新增。遮罩就是 RMOS.g(与各向异性同一位,但两个 keyword 互斥)。
+    // 三段色按 UV.y 位置分层 + pattern 图着色,并接管 metallic / 粗糙度 / 法线。
+    //: param custom { "default": false, "label": "启用侵蚀 _CHARACTER_EROSION", "group": "B CharacterErosion 侵蚀" }
+    uniform bool u_CharacterErosion;
+    //: param custom { "default": "", "default_color": [0.5,0.5,1.0,1.0], "label": "侵蚀法线(RG)+光滑度(B)", "usage": "texture", "group": "B CharacterErosion 侵蚀" }
+    uniform sampler2D _ErosionNormalSmoothnessMap;
+    //: param custom { "default": [1.0, 1.0, 0.0, 0.0], "label": "侵蚀法线图 ST", "group": "B CharacterErosion 侵蚀" }
+    uniform vec4 _ErosionNormalSmoothnessMap_ST;
+    //: param custom { "default": "", "default_color": [0.0,0.0,0.0,1.0], "label": "侵蚀 Pattern 图(R)", "usage": "texture", "group": "B CharacterErosion 侵蚀" }
+    uniform sampler2D _ErosionPatternMap;
+    //: param custom { "default": [1.0, 1.0, 0.0, 0.0], "label": "侵蚀 Pattern 图 ST", "group": "B CharacterErosion 侵蚀" }
+    uniform vec4 _ErosionPatternMap_ST;
+    //: param custom { "default": 1.0, "label": "侵蚀法线强度 NormalScale", "min": 0.0, "max": 4.0, "group": "B CharacterErosion 侵蚀" }
+    uniform float _ErosionNormalScale;
+    //: param custom { "default": 0.5, "label": "侵蚀 Metallic", "min": 0.0, "max": 1.0, "group": "B CharacterErosion 侵蚀" }
+    uniform float _ErosionMetallic;
+    //: param custom { "default": 0.0, "label": "侵蚀光滑度 Bias", "min": -1.0, "max": 1.0, "group": "B CharacterErosion 侵蚀" }
+    uniform float _ErosionSmoothnessBias;
+    //: param custom { "default": [0.8, 0.4, 0.5, 1.0], "label": "侵蚀 BaseColor", "widget":"color", "group": "B CharacterErosion 侵蚀" }
+    uniform vec4 _ErosionBaseColor;
+    //: param custom { "default": false, "label": "启用 Root/Top 分段染色 UV2Tint", "group": "B CharacterErosion 侵蚀" }
+    uniform bool _ErosionUV2Tint;
+    //: param custom { "default": [0.1, 0.1, 0.1, 1.0], "label": "侵蚀 RootColor", "widget":"color", "group": "B CharacterErosion 侵蚀" }
+    uniform vec4 _ErosionBaseRootColor;
+    //: param custom { "default": 0.1, "label": "Root 位置", "min": 0.0, "max": 0.9, "group": "B CharacterErosion 侵蚀" }
+    uniform float _ErosionBaseRootColorLocation;
+    //: param custom { "default": 0.1, "label": "Root 羽化", "min": 0.0, "max": 0.25, "group": "B CharacterErosion 侵蚀" }
+    uniform float _ErosionBaseRootColorSmooth;
+    //: param custom { "default": [0.75, 0.75, 0.75, 1.0], "label": "侵蚀 TopColor", "widget":"color", "group": "B CharacterErosion 侵蚀" }
+    uniform vec4 _ErosionBaseTopColor;
+    //: param custom { "default": 0.7, "label": "Top 位置", "min": 0.0, "max": 0.9, "group": "B CharacterErosion 侵蚀" }
+    uniform float _ErosionBaseTopColorLocation;
+    //: param custom { "default": 0.1, "label": "Top 羽化", "min": 0.0, "max": 0.25, "group": "B CharacterErosion 侵蚀" }
+    uniform float _ErosionBaseTopColorSmooth;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "Pattern 染色", "widget":"color", "group": "B CharacterErosion 侵蚀" }
+    uniform vec4 _ErosionPatternTintColor;
+  //- endregion
+
   //- region ExtraAlphaMask 额外遮罩 (Standard, 无 keyword)
     // 参考里没有开关属性:材质挂了图就采。R=Alpha G=Root B=Depth A=ID,
     // 反照率被 Root/Depth 两段 tint 各乘一次(参考 _391.._393)。
@@ -965,6 +1004,24 @@
       }
       return faceSign * normalize(normalWS_raw);
   }
+
+  // 切线空间版本:侵蚀(_CHARACTER_EROSION)要在**切线空间**里做 RNM 混合,
+  // 拿到世界空间就没法混了。数学与上面完全同源,只是不做 TBN 变换。
+  float3 SampleBumpNormalTS(V2F inputs, float bumpScale) {
+      if (u_UseBumpMap) {
+          float3 tsN = getTSNormal(inputs.sparse_coord);
+          float nrmZ = max(sqrt(1.0 - min(tsN.x*tsN.x + tsN.y*tsN.y, 1.0)), 1e-16);
+          return float3(tsN.x * bumpScale, tsN.y * bumpScale, nrmZ);
+      }
+      return float3(0.0, 0.0, 1.0);
+  }
+
+  float3 TangentToWorld(float3 tsN, float3 normalWS_raw, float4 tangentWS, float faceSign) {
+      float3 nrmWS = normalize(normalWS_raw);
+      float3 tanWS = normalize(tangentWS.xyz);
+      float3 bitWS = cross(nrmWS, tanWS) * tangentWS.w;
+      return faceSign * normalize(tsN.x * tanWS + tsN.y * bitWS + tsN.z * nrmWS);
+  }
 //- }
 
 //----------------------------------------------------------------------region Part 0 Standard — HGRP_CharacterNPR_Fix.shader computeNPRLighting 逐行移植
@@ -1108,6 +1165,61 @@
 
       // ---- Normal map ----
       float3 N = SampleBumpNormal(inputs, normalWS_raw, tangentWS, faceSign, _BumpScale);
+
+      // ---- CharacterErosion 侵蚀 (_CHARACTER_EROSION) ----
+      // 参考 Sub0_Pass0_Fragment_b1289 的 _418.._707。遮罩 = RMOS.g(_343),
+      // 与各向异性同一位;两个 keyword 在参考里互斥,不会同时生效。
+      if (u_CharacterErosion) {
+          float eMask = specScale;                                          // _343
+          float2 eNrmUV = uv * _ErosionNormalSmoothnessMap_ST.xy + _ErosionNormalSmoothnessMap_ST.zw;
+          float4 eNS = texture(_ErosionNormalSmoothnessMap, eNrmUV);        // _418
+          float2 ePatUV = uv * _ErosionPatternMap_ST.xy + _ErosionPatternMap_ST.zw;
+          float ePat = texture(_ErosionPatternMap, ePatUV).r;               // _549
+
+          // 三段色:按 uv.y 的位置 + 羽化,root -> base -> top
+          float dRoot = _ErosionBaseRootColorSmooth - _ErosionBaseRootColorLocation;   // _463
+          float dTop = _ErosionBaseTopColorSmooth - _ErosionBaseTopColorLocation;      // _464
+          float tRoot = clamp((dRoot + uv.y)
+                              / (dRoot + (_ErosionBaseRootColorSmooth + _ErosionBaseRootColorLocation)),
+                              0.0, 1.0);                                    // _473
+          float tTop = clamp((dTop + uv.y)
+                             / (dTop + (_ErosionBaseTopColorSmooth + _ErosionBaseTopColorLocation)),
+                             0.0, 1.0);                                     // _474
+          float sRoot = (tRoot * tRoot) * mad(tRoot, -2.0, 3.0);            // _481
+          float sTop = (tTop * tTop) * mad(tTop, -2.0, 3.0);                // _482
+          float3 eCol = lerp(_ErosionBaseRootColor.rgb, _ErosionBaseColor.rgb, sRoot);  // _506
+          eCol = _ErosionUV2Tint ? lerp(eCol, _ErosionBaseTopColor.rgb, sTop)
+                                 : _ErosionBaseColor.rgb;                   // _554
+          eCol = lerp(eCol, _ErosionPatternTintColor.rgb, ePat);            // _588 内层
+
+          float3 erodedAlbedo = lerp(albedo, eCol, eMask);                  // _588
+          // 阴影色按同一遮罩混向被侵蚀反照率的一半(_614)
+          shadowColor = lerp(shadowColor, erodedAlbedo * 0.5, eMask);
+          albedo = erodedAlbedo;
+
+          metallic = lerp(metallic, _ErosionMetallic * (1.0 - ePat), eMask);   // _624
+          float eSmooth = clamp(eNS.b + _ErosionSmoothnessBias, 0.0, 1.0);     // _632
+          roughnessRaw = mad(eMask,
+                             (smoothness - 1.0) + mad(ePat, (eSmooth - 1.0) + 0.8, 1.0 - eSmooth),
+                             1.0 - smoothness);                                // _640
+
+          // 法线:切线空间里的 RNM(Reoriented Normal Mapping)混合 —— 参考
+          // _664/_670/_671/_672 就是这个式子,底法线的 z 先 +1。
+          float3 baseTS = SampleBumpNormalTS(inputs, _BumpScale);
+          float eScale = eMask * _ErosionNormalScale;                        // _438
+          float eNx = mad(eNS.r, 2.0, -1.0);
+          float eNy = mad(eNS.g, 2.0, -1.0);
+          float eNz = max(sqrt(1.0 - min(eNx * eNx + eNy * eNy, 1.0)), 1e-16);  // _432
+          eNx *= eScale;
+          eNy *= eScale;
+          float3 n1 = float3(baseTS.x, baseTS.y, baseTS.z + 1.0);            // _396,_397,_641
+          float3 n2 = float3(-eNx, -eNy, eNz);
+          float d = dot(n1, n2);                                             // _664
+          float3 blendedTS = float3(d * n1.x / n1.z + eNx,
+                                    d * n1.y / n1.z + eNy,
+                                    d - eNz);                               // _670,_671,_672
+          N = TangentToWorld(blendedTS, normalWS_raw, tangentWS, faceSign);
+      }
 
       // ---- ClearCoat setup (mask = user1.r; 通道未填充时回退 HGRP 默认 "white"=1) ----
       float ccMask = 0.0;
