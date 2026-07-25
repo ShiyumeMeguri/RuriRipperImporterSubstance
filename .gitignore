@@ -179,3 +179,5 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+# tools/shader_gap.py 的报告产物,可随时重跑生成
+shader_gap.json
