@@ -178,6 +178,38 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region CharacterDissolve 角色溶解 (keyword VFX_CHARACTER_DISSOLVE)
+    // 参考 Sub0_Pass0_Fragment_b1095 的 _2642/_2647/_3805。参考里这些属性都是
+    // [HideInInspector] —— 运行时由 VFX 系统驱动的动画量,不是美术在材质面板
+    // 里填的。Painter 没有那套调度,所以做成滑条,能预览任意进度。
+    //: param custom { "default": false, "label": "启用溶解 VFX_CHARACTER_DISSOLVE", "group": "D CharacterDissolve 溶解" }
+    uniform bool u_CharacterDissolve;
+    //: param custom { "default": "", "default_color": [1.0,1.0,1.0,1.0], "label": "溶解噪声图(R)", "usage": "texture", "group": "D CharacterDissolve 溶解" }
+    uniform sampler2D _DissolveTex;
+    //: param custom { "default": [1.0, 1.0, 0.0, 0.0], "label": "溶解图 ST", "group": "D CharacterDissolve 溶解" }
+    uniform vec4 _DissolveTex_ST;
+    //: param custom { "default": false, "label": "使用溶解 UseDissolve", "group": "D CharacterDissolve 溶解" }
+    uniform bool _UseDissolve;
+    //: param custom { "default": false, "label": "溶解图用视空间 UV UseViewUV", "group": "D CharacterDissolve 溶解" }
+    uniform bool _DissolveUseViewUV;
+    // [H16] 参考取 max(_DissolveScheduleOffset, 引擎逐物体进度);Painter 没有
+    //       后者 → 只用这个属性,滑条即进度(0=未溶解,1=全溶解)。
+    //: param custom { "default": 0.0, "label": "[H16] 溶解进度 ScheduleOffset", "min": 0.0, "max": 1.0, "group": "D CharacterDissolve 溶解" }
+    uniform float _DissolveScheduleOffset;
+    //: param custom { "default": 1.0, "label": "溶解边缘锐利度 EdgeSharp", "min": 0.0, "max": 50.0, "group": "D CharacterDissolve 溶解" }
+    uniform float _DissolveEdgeSharp;
+    //: param custom { "default": 0.0, "label": "溶解边缘自发光宽度 EmissiveEdge", "min": 0.0, "max": 2.0, "group": "D CharacterDissolve 溶解" }
+    uniform float _DissolveEmissiveEdge;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "溶解边缘自发光色", "widget":"color", "group": "D CharacterDissolve 溶解" }
+    uniform vec4 _DissolveEmissiveColor;
+    //: param custom { "default": false, "label": "使用切面 UseCutOff", "group": "D CharacterDissolve 溶解" }
+    uniform bool _UseCutOff;
+    //: param custom { "default": 0.0, "label": "切面位置 CutOffPosY", "min": -10.0, "max": 10.0, "group": "D CharacterDissolve 溶解" }
+    uniform float _CutOffPosY;
+    //: param custom { "default": [0.0, 1.0, 0.0, 0.0], "label": "切面方向 CutOffDirection", "group": "D CharacterDissolve 溶解" }
+    uniform vec4 _CutOffDirection;
+  //- endregion
+
   //- region RealisticLighting (Standard, keyword _REALISTIC_LIGHTING)
     // 参考 b403(ON) vs b369(OFF) 的规范化 diff:唯一差别是**去掉两处风格化的
     // 环境亮度重映射** —— brightMix(0.35L+0.65,再按 CP1.x 混向 clamp(L,1.25,1.75))
@@ -1227,6 +1259,30 @@
       // ---- Normal map ----
       float3 N = SampleBumpNormal(inputs, normalWS_raw, tangentWS, faceSign, _BumpScale);
 
+      // ---- CharacterDissolve 溶解 (VFX_CHARACTER_DISSOLVE) ----
+      // _2642 = _UseCutOff*(CutOffPosY - dot(pos, CutOffDir))
+      //       + _UseDissolve*(noise.r - (progress*2.02 - 1.01))
+      // 低于阈值直接 discard(_2646),边缘按 EdgeSharp 出自发光(_3805)。
+      float dissolveEdgeEmis = 0.0;
+      if (u_CharacterDissolve) {
+          float2 dUV = uv;
+          if (_DissolveUseViewUV) {
+              float3 vpos = mat3(uniform_camera_view_matrix) * positionWS;
+              dUV = vpos.xy;
+          }
+          dUV = dUV * _DissolveTex_ST.xy + _DissolveTex_ST.zw;
+          float dNoise = texture(_DissolveTex, dUV).r;
+          float dThreshold = mad(_DissolveScheduleOffset, 2.02, -1.01);        // [H16]
+          float dAmount = (_UseCutOff
+                           ? (_CutOffPosY - dot(positionWS, _CutOffDirection.xyz)) : 0.0)
+                        + (_UseDissolve ? (dNoise - dThreshold) : 0.0);        // _2642
+          if (clamp(dAmount * _DissolveEdgeSharp, 0.0, 1.0) - 0.01 < 0.0) {
+              discard;                                                          // _2646
+          }
+          dissolveEdgeEmis = clamp((_DissolveEmissiveEdge - dAmount) * _DissolveEdgeSharp,
+                                   0.0, 1.0);                                   // _3805
+      }
+
       // ---- Puppet 傀儡 (_PUPPET / _PUPPET_PROCEDURAL_DCURVE) ----
       // 参考 Sub0_Pass0_Fragment_b611(_PUPPET)与 b1323(DCurve)。两条上色路径
       // 共用同一个区域遮罩 _426/_479;关掉区域遮罩时遮罩退回 RMOS.g。
@@ -1809,6 +1865,9 @@
       }
       if (u_EnemyHitFlash) {
           emissionContrib += hitFlashWeight * hitFlashEmissive * f_HitFlashExposure;
+      }
+      if (u_CharacterDissolve) {
+          emissionContrib += dissolveEdgeEmis * _DissolveEmissiveColor.rgb;   // _3805
       }
 
       // ==== FINAL ASSEMBLY ====
