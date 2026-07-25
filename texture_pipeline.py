@@ -1,0 +1,283 @@
+# -*- coding: utf-8 -*-
+"""Execute a MaterialPlan's texture jobs: decode the source image, split/rebuild
+the channels Painter needs, and write the results into the project cache.
+
+Decoding and encoding both go through Qt's own image codecs (PySide6 ships with
+Painter, so this adds no dependency and runs at C++ speed); the per-pixel maths
+in between is numpy. Nothing here shells out, and nothing depends on Pillow.
+
+The channel semantics are ported from BuildSPInputs.py unchanged -- same
+splits, same Unity normal decode, same Smoothness->Roughness inversion -- so
+the EndField_Uber shader consuming the results sees byte-identical inputs to
+the old offline pipeline.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+
+import numpy as np
+
+try:
+    from PySide6 import QtCore, QtGui
+except ImportError:  # older Painter builds
+    from PySide2 import QtCore, QtGui
+
+try:
+    from . import unity_material
+except ImportError:  # standalone (non-package) testing
+    import unity_material
+
+
+# ---------------------------------------------------------------------------
+# Qt <-> numpy
+# ---------------------------------------------------------------------------
+def _qimage_to_rgba(image):
+    """QImage -> (h, w, 4) uint8, honouring the image's own scanline padding
+    (bytesPerLine is NOT guaranteed to be width*4)."""
+    image = image.convertToFormat(QtGui.QImage.Format.Format_RGBA8888)
+    width, height = image.width(), image.height()
+    stride = image.bytesPerLine()
+    buffer = bytes(image.constBits())[:stride * height]
+    rows = np.frombuffer(buffer, dtype=np.uint8).reshape(height, stride)
+    return np.ascontiguousarray(rows[:, :width * 4].reshape(height, width, 4))
+
+
+def decode_image(data_or_path):
+    """Decode raw image bytes or a file path into an (h, w, 4) uint8 array."""
+    image = QtGui.QImage()
+    if isinstance(data_or_path, (bytes, bytearray, memoryview)):
+        ok = image.loadFromData(QtCore.QByteArray(bytes(data_or_path)))
+    else:
+        ok = image.load(str(data_or_path))
+    if not ok or image.isNull():
+        return None
+    return _qimage_to_rgba(image)
+
+
+def _save(array, path):
+    """Write an (h, w) / (h, w, 3) / (h, w, 4) uint8 array as PNG."""
+    array = np.ascontiguousarray(array, dtype=np.uint8)
+    height, width = array.shape[0], array.shape[1]
+    if array.ndim == 2:
+        payload = array.tobytes()
+        image = QtGui.QImage(payload, width, height, width,
+                             QtGui.QImage.Format.Format_Grayscale8)
+    elif array.shape[2] == 3:
+        payload = array.tobytes()
+        image = QtGui.QImage(payload, width, height, width * 3,
+                             QtGui.QImage.Format.Format_RGB888)
+    else:
+        payload = array.tobytes()
+        image = QtGui.QImage(payload, width, height, width * 4,
+                             QtGui.QImage.Format.Format_RGBA8888)
+    # QImage does not copy the buffer it was constructed over, and `payload`
+    # dies with this frame -- copy() detaches into Qt-owned storage before the
+    # (asynchronous-free but still post-return) save touches it.
+    image = image.copy()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return bool(image.save(path, "PNG"))
+
+
+# ---------------------------------------------------------------------------
+# Decode operations (ported from BuildSPInputs)
+# ---------------------------------------------------------------------------
+def reconstruct_normal(rgba, flip_green=False, use_ag=True, channels=(0, 1)):
+    """Unity stores tangent-space normals in two channels and drops Z, which is
+    why such a texture looks yellow/olive; Painter needs a full RGB normal.
+
+    Unity decode (identical to EndField_Uber.glsl):
+        X = R * A     (UnpackNormalmapRGorAG: packednormal.x *= packednormal.w)
+        Y = G
+        Z = sqrt(1 - X^2 - Y^2)
+    Output: R = X, G = Y, B = (Z + 1) / 2   (flat = 128,128,255).
+
+    ``channels`` picks which two source channels hold X and Y -- (0, 1) for a
+    normal Unity RG/AG map, (2, 3) for the specular half of a hair
+    _SplitNormalMap. ``use_ag`` must be False for the split map: its alpha is
+    the spec normal's Y, never an AG multiplier.
+    """
+    data = rgba.astype(np.float32) / 255.0
+    x_raw = data[..., channels[0]]
+    y_raw = data[..., channels[1]]
+    alpha = data[..., 3] if rgba.shape[2] >= 4 else np.ones_like(x_raw)
+
+    x = x_raw * alpha if use_ag else x_raw
+    y = (1.0 - y_raw) if flip_green else y_raw
+
+    xn = x * 2.0 - 1.0
+    yn = y * 2.0 - 1.0
+    zn = np.sqrt(np.clip(1.0 - (xn * xn + yn * yn), 0.0, 1.0))
+
+    out = np.empty(rgba.shape[:2] + (3,), np.float32)
+    out[..., 0] = x
+    out[..., 1] = y
+    out[..., 2] = (zn + 1.0) * 0.5
+    return np.clip(out * 255.0 + 0.5, 0.0, 255.0).astype(np.uint8)
+
+
+def normal_already_standard(rgba):
+    """A non-empty blue channel means the map is already a standard OpenGL
+    normal (some exports ship pre-decoded) -- copy it rather than decoding a
+    second time."""
+    if rgba.shape[2] < 3:
+        return False
+    blue = rgba[..., 2].astype(np.float32)
+    return bool(blue.std() > 8.0 and blue.mean() > 100.0)
+
+
+_OPS = {
+    unity_material.OP_COPY_RGB:   lambda a: a[..., :3],
+    unity_material.OP_COPY_RGBA:  lambda a: a,
+    unity_material.OP_CHANNEL_R:  lambda a: a[..., 0],
+    unity_material.OP_CHANNEL_G:  lambda a: a[..., 1],
+    unity_material.OP_CHANNEL_B:  lambda a: a[..., 2],
+    unity_material.OP_CHANNEL_A:  lambda a: a[..., 3],
+    # Roughness = 1 - Smoothness (Unity keeps smoothness in alpha).
+    unity_material.OP_INVERT_A:   lambda a: (255 - a[..., 3].astype(np.int16)).astype(np.uint8),
+}
+
+
+def apply_op(op, rgba, flip_green=False):
+    simple = _OPS.get(op)
+    if simple is not None:
+        return np.ascontiguousarray(simple(rgba))
+    if op == unity_material.OP_NORMAL_UNITY:
+        if normal_already_standard(rgba):
+            return np.ascontiguousarray(rgba[..., :3])
+        return reconstruct_normal(rgba, flip_green=flip_green, use_ag=True, channels=(0, 1))
+    if op == unity_material.OP_NORMAL_SPLIT_RG:
+        return reconstruct_normal(rgba, flip_green=flip_green, use_ag=False, channels=(0, 1))
+    if op == unity_material.OP_NORMAL_SPLIT_BA:
+        return reconstruct_normal(rgba, flip_green=flip_green, use_ag=False, channels=(2, 3))
+    raise ValueError("unknown texture op: {0}".format(op))
+
+
+# ---------------------------------------------------------------------------
+# Source resolution + execution
+# ---------------------------------------------------------------------------
+class TextureBaker:
+    """Runs texture jobs against one asset database, writing into one folder.
+
+    Decoded source images and produced files are both memoized: a texture bound
+    by several materials is decoded once, and an identical (source, operation)
+    pair is written once and shared -- Painter imports the file by path, so the
+    same file simply becomes the same project resource.
+    """
+
+    INDEX_NAME = "_index.json"
+    _VERSION_KEY = "__bake_version__"
+
+    def __init__(self, db, out_dir, flip_green=False, force=False):
+        self.db = db
+        self.out_dir = out_dir
+        self.flip_green = flip_green
+        self.force = force
+        self._source_cache = {}
+        self._output_cache = {}
+        self.warnings = []
+        self.written = 0
+        self.reused = 0
+        if not force:
+            self._load_index()
+
+    def _index_path(self):
+        return os.path.join(self.out_dir, self.INDEX_NAME)
+
+    def _load_index(self):
+        """Restore the (source texture, operation) -> file mapping from the last
+        run. Without it a re-import is not deterministic: a texture shared by
+        several materials gets written under whichever material happened to
+        claim it first, so a second run would bake fresh near-duplicates under
+        the OTHER materials' names and Painter's shelf would slowly fill with
+        copies of the same ramp."""
+        try:
+            with open(self._index_path(), "r", encoding="utf-8") as handle:
+                stored = json.load(handle)
+        except (OSError, ValueError):
+            return
+        if not isinstance(stored, dict):
+            return
+        # A bake-rules change must invalidate what is on disk. The cheap reuse
+        # path below matches on FILE NAME (<material>__<target>.png), which
+        # carries no version, so without this a rules change is silently masked
+        # by stale files and looks like the fix did not work.
+        if stored.get(self._VERSION_KEY) != unity_material.TextureJob.BAKE_VERSION:
+            self.force = True
+            return
+        for key, path in stored.items():
+            if key == self._VERSION_KEY:
+                continue
+            if isinstance(path, str) and os.path.isfile(path):
+                self._output_cache[key] = path
+
+    def flush(self):
+        """Persist the mapping. Call once after every material has been run."""
+        try:
+            os.makedirs(self.out_dir, exist_ok=True)
+            payload = dict(self._output_cache)
+            payload[self._VERSION_KEY] = unity_material.TextureJob.BAKE_VERSION
+            with open(self._index_path(), "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=1, ensure_ascii=False)
+        except OSError:
+            pass
+
+    def _source(self, guid):
+        if guid in self._source_cache:
+            return self._source_cache[guid]
+        payload = None
+        png_bytes = getattr(self.db, "png_bytes", None)
+        if callable(png_bytes):
+            payload = png_bytes(guid)
+        if payload is None:
+            path = self.db.resolve_guid(guid)
+            if path and os.path.isfile(path):
+                payload = path
+        rgba = decode_image(payload) if payload is not None else None
+        if rgba is None:
+            self.warnings.append("texture {0} could not be decoded".format(guid[:8]))
+        self._source_cache[guid] = rgba
+        return rgba
+
+    def run(self, material_name, jobs):
+        """Execute one material's jobs. Returns {target: absolute path} for
+        whichever jobs produced a file."""
+        produced = {}
+        for job in jobs:
+            key = job.cache_key()
+            cached = self._output_cache.get(key)
+            if cached is not None:
+                produced[job.target] = cached
+                self.reused += 1
+                continue
+            path = os.path.join(self.out_dir,
+                                "{0}__{1}.png".format(_safe(material_name), _safe(job.target)))
+            if not self.force and os.path.isfile(path):
+                self._output_cache[key] = path
+                produced[job.target] = path
+                self.reused += 1
+                continue
+            rgba = self._source(job.guid)
+            if rgba is None:
+                continue
+            try:
+                array = apply_op(job.op, rgba, flip_green=self.flip_green)
+            except Exception as exc:
+                self.warnings.append("{0}.{1}: {2}".format(material_name, job.target, exc))
+                continue
+            if not _save(array, path):
+                self.warnings.append("{0}.{1}: could not write {2}".format(
+                    material_name, job.target, path))
+                continue
+            self._output_cache[key] = path
+            produced[job.target] = path
+            self.written += 1
+        return produced
+
+
+_UNSAFE = set('<>:"/\\|?*')
+
+
+def _safe(name):
+    return "".join("_" if c in _UNSAFE or ord(c) < 32 else c for c in str(name)).strip() or "unnamed"
