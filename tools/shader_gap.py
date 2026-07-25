@@ -33,7 +33,28 @@ um = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(um)
 
 glsl_text = open(GLSL, encoding="utf-8", errors="replace").read()
-glsl_names = set(re.findall(r"\b(_\w+|u_\w+|v_\w+|f_\w+|i_\w+)\b", glsl_text))
+# Comments must NOT count as an implementation. Naming a property in a note that
+# explains why it is out of reach would otherwise mark it "uniform" and quietly
+# shrink the gap -- the report would then measure how much prose was written
+# rather than how much code exists. Strip block and line comments first.
+glsl_code = re.sub(r"/\*.*?\*/", " ", glsl_text, flags=re.S)
+glsl_code = re.sub(r"//.*", " ", glsl_code)
+glsl_names = set(re.findall(r"\b(_\w+|u_\w+|v_\w+|f_\w+|i_\w+)\b", glsl_code))
+
+# Properties consumed by hand-written logic in build_plan rather than by a
+# table, so neither the tables nor a GLSL name match can find them. Each entry
+# names where it lands; `python tools/where_used.py` will not help here, the
+# reference *does* read them -- this port just routes them through a differently
+# named uniform. Verified against the `floats.get(...)` call sites.
+DERIVED = {
+    "_SurfaceType":     "-> u_AlphaBlend",
+    "_AlphaClip":       "-> u_AlphaClip",
+    "_EnableAlphaTest": "-> u_AlphaClip",
+    "_ParallaxScale":   "-> _EyeParallaxScale on parts 2/5",
+    "_CharaPartID":     "-> u_CharaPart (part inference)",
+    "_UseMatcap":       "-> part inference (Eyes vs Eyebrow)",
+    "_UseGrayAsAlpha":  "-> part inference (OverlayShadow) + shadeOverlayShadow",
+}
 
 CHANNEL_PROPS = set(um.CHANNEL_SOURCES)
 SAMPLER_PROPS = set(um.TEXTURE_PARAMS)
@@ -96,6 +117,8 @@ def classify(entry):
         return "float/color"
     if name in glsl_names:
         return "uniform"
+    if name in DERIVED:
+        return "derived"
     if "HideInInspector" in attrs:
         return "internal"
     if ptype == "Float" and re.search(r"\{(Section|Feature):", label):

@@ -183,6 +183,8 @@ FLOAT_DEFAULTS = {
     "_AlphaClipThreshold": 0.5, "_ViewFade": 0.0,
     # Part 8 ShadowReceiver -- 参考 characternpr_shadowreceiver.shader 的原值
     "_CircleFadeDistance": 0.5, "_CircleFadeSmoothness": 0.0,
+    # [H21] 描边片元程序 -- 参考 characternpr.shader 的原值
+    "_OutlineColorBrightness": 0.5, "_OutlineColorSaturation": 1.5,
     "_DissolveEdgeSharp": 1.0, "_DissolveScheduleOffset": 0.0,
     "_DissolveEmissiveEdge": 0.0, "_CutOffPosY": 0.0,
     "_PuppetMaskLocationDown": 0.1, "_PuppetMaskLocationTop": 0.5,
@@ -268,6 +270,7 @@ FLOAT_IDENTITY = [
     "_HairBrowMaskThreshold",
     "_AlphaClipThreshold", "_ViewFade",
     "_CircleFadeDistance", "_CircleFadeSmoothness",
+    "_OutlineColorBrightness", "_OutlineColorSaturation",
     "_DissolveEdgeSharp", "_DissolveScheduleOffset", "_DissolveEmissiveEdge",
     "_CutOffPosY",
     "_PuppetMaskLocationDown", "_PuppetMaskLocationTop", "_PuppetMaskSmooth",
@@ -330,7 +333,7 @@ COLOR_IDENTITY = [
     "_DissolveEmissiveColor", "_CutOffDirection",
     "_HairBaseTintColor", "_HairAddTintColor", "_EyeTintColor",
     "_FaceDecalTintColor",
-    "_ShadowColor", "_CapsuleAoColor",
+    "_ShadowColor", "_CapsuleAoColor", "_OutlineTintColor",
     "_PuppetBaseColor", "_PuppetPatternTintColor", "_PuppetPatternTintEdgeColor",
     "_PuppetPatternSpeed", "_PuppetPDCurveUVScaleSpeed", "_PuppetPDCurveBaseColor",
     "_PuppetPDCurveLightColor", "_PuppetPDCurveEdgeColor",
@@ -411,6 +414,8 @@ BOOL_MAP = {
     "_DisableCharacterSelfShadow": "_DisableCharacterSelfShadow",
     "_DisableSceneShadow":   "_DisableSceneShadow",
     "_CircleFade":           "_CircleFade",
+    "u_EnableOutline":       "_EnableOutline",
+    "_OutlineTintEnable":    "_OutlineTintEnable",
     "_ParallaxUseNormal":    "_ParallaxUseNormal",
     "_UseDissolve":          "_UseDissolve",
     "_UseCutOff":            "_UseCutOff",
@@ -508,7 +513,7 @@ IGNORED_KEYWORDS = {
     "_FBXROTATIONFIX_ON": "deliberately unmapped -- it rotates the hair anisotropy axis "
                           "90 degrees on Painter's world-baked mesh (see BOOL_MAP)",
     "_ADVANCEDOPTION_ON": "editor-only shader GUI toggle",
-    "_OUTLINE_MASK": "Painter has no outline pass",
+    "_OUTLINE_MASK": "the outline mask modulates the vertex extrusion width; the outline FRAGMENT program is ported ([H21]) but the extrusion is not",
     "_USE_ALCHEMY_AO": "engine AO variant; [H5] skips the sandbox custom AO",
     "_USE_GROUND_TRUTH_AO": "engine AO variant; [H5] skips the sandbox custom AO",
     "_CHARACTER_FUR": "the Fur path is selected by CharaPart == 4 (infer_chara_part), "

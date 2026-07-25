@@ -127,6 +127,24 @@
     uniform float _ShadowColorSaturation;
   //- endregion
 
+  //- region 描边 (Pass1 CharacterOutline 的片元程序)
+    // [H21] 描边是 `Cull Front` 的反壳 pass —— 它画的正是**背面**。
+    //   顶点挤出(_OutlineWidth / _OutlineOffsetZ / _OutlineAverageNormal)Painter 做不到,
+    //   但描边的**片元程序**可以 1:1 移植:参考 Pass1 只是把 albedo 换成
+    //   ComputeOutlineAlbedo 的重映射,再走同一条光照链(_ShadowColorBrightness/
+    //   Saturation 这些下游照旧生效)。开启后背面不再被 _Cull 丢掉,而是按描边色着色。
+    //: param custom { "default": false, "label": "启用描边(背面着描边色)", "group": "6 描边 Outline" }
+    uniform bool u_EnableOutline;
+    //: param custom { "default": false, "label": "直接用描边颜色 OutlineTintEnable", "group": "6 描边 Outline" }
+    uniform bool _OutlineTintEnable;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "描边颜色 OutlineTintColor", "widget":"color", "group": "6 描边 Outline" }
+    uniform vec4 _OutlineTintColor;
+    //: param custom { "default": 0.5, "label": "描边色亮度 OutlineColorBrightness", "min": 0.0, "max": 1.0, "group": "6 描边 Outline" }
+    uniform float _OutlineColorBrightness;
+    //: param custom { "default": 1.5, "label": "描边色饱和度 OutlineColorSaturation", "min": 0.0, "max": 2.0, "group": "6 描边 Outline" }
+    uniform float _OutlineColorSaturation;
+  //- endregion
+
   //- region 高光 Ramp / 反射
     //: param custom { "default": false, "label": "使用高光 Ramp _SPEC_RAMP_ON", "group": "3 高光Ramp与反射" }
     uniform bool u_UseSpecRamp;
@@ -1178,6 +1196,19 @@
       float3 lut1 = SRGBToLinear3(textureLod(_ShadowLutTex, float2(lutU + 0.03125, lutV), 0.0).rgb);
       float bFrac = sB * 31.0 - bSlice;
       return lerp(lut0, lut1, bFrac);
+  }
+
+  // [H21] 描边 albedo —— 参考 Pass1 CharacterOutline 的 _311.._352 逐字:
+  //   ob   = _BaseMap.rgb * _BaseColor.rgb * _OutlineColorBrightness
+  //   lum  = dot(ob, LUM)
+  //   out  = _OutlineTintEnable ? _OutlineTintColor.rgb
+  //                             : _OutlineColorSaturation * (ob - lum) + lum
+  // 与 ComputeShadowColorBrightSat 同构(参考自己也是同一套亮度/饱和重映射)。
+  float3 ComputeOutlineAlbedo(float3 baseTimesColor) {
+      float3 ob = baseTimesColor * _OutlineColorBrightness;   // _311.._313 * _318
+      float oLum = dot(ob, LUM);                              // _323
+      return _OutlineTintEnable ? _OutlineTintColor.rgb
+                                : (_OutlineColorSaturation * (ob - oLum) + oLum);
   }
 
   // 亮度/饱和度阴影色 (LUT 关闭分支, Cloth/Hair/Fur/Eye 用; Face 的 #else 是纯白, 不走这里)
@@ -3779,8 +3810,12 @@
       // 但同一个可见结果在片元里做得到。值就是 Unity 的 Cull 枚举
       // (0=Off 1=Front 2=Back),inspector 上那三个标签说的是**渲染哪一面**,
       // 所以默认 2 = Cull Back = 只画正面。
-      if ((_Cull > 0.5 && _Cull < 1.5 && isFrontFace)        // Cull Front
-          || (_Cull >= 1.5 && !isFrontFace)) {               // Cull Back
+      // [H21] 描边开着时,背面不再丢弃 —— 参考的 Pass1 正是 `Cull Front` 把背面
+      //       画成描边,两个 pass 合起来两面都画。这里由同一个片元程序承担。
+      bool outlineFrag = u_EnableOutline && !isFrontFace;
+      if (!outlineFrag
+          && ((_Cull > 0.5 && _Cull < 1.5 && isFrontFace)    // Cull Front
+              || (_Cull >= 1.5 && !isFrontFace))) {          // Cull Back
           discard;
       }
 
@@ -3830,6 +3865,7 @@
           } else {
               albedo = baseCol * _BaseColor.rgb;
           }
+          if (outlineFrag) albedo = ComputeOutlineAlbedo(baseCol * _BaseColor.rgb); // [H21]
           color = shadeFace(inputs, inputs.position, inputs.normal, tangentWS, faceSign, albedo, baseAlphaTex);
           outAlpha = 1.0; // HGRP Skin ForwardLit 输出 alpha=1
           skipDefaultClip = true; // characternpr_skin 的 Pass0 从不裁切
@@ -3848,6 +3884,7 @@
           float baseAlpha = baseAlphaTex * _BaseColor.a;
           // 参考 characternpr_hair b117 _464/_493:两段发色染色,遮罩就是 baseAlpha
           albedo *= lerp(_HairAddTintColor.rgb, _HairBaseTintColor.rgb, baseAlpha);
+          if (outlineFrag) albedo = ComputeOutlineAlbedo(baseCol * _BaseColor.rgb); // [H21]
           color = shadeHair(inputs, inputs.position, inputs.normal, tangentWS, faceSign, albedo, baseAlpha);
           outAlpha = u_AlphaBlend ? baseAlphaTex : 1.0; // 原: (_SurfaceType==1) ? baseSample.a : 1
       }
@@ -3881,6 +3918,7 @@
       else {
           // ---- Standard (默认 / Part 0) ----
           float3 albedo = baseCol * _BaseColor.rgb;
+          if (outlineFrag) albedo = ComputeOutlineAlbedo(albedo); // [H21]
           float3 shadowColorUnused;
           color = shadeStandard(inputs, inputs.position, inputs.normal, tangentWS, faceSign, albedo, baseAlphaTex, shadowColorUnused);
           // 参考 _1824:alpha = smoothstep(viewFade) * ExtraAlphaMask.a * _BaseColor.a
