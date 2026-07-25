@@ -103,6 +103,7 @@ TEXTURE_PARAMS = {
     # 丝袜遮罩:R 各向异性强度 / G 锐利度 / B 湿身光滑度 / A 透肉度 —— 四个通道
     # 都是数据,Painter 会对 RGB 强制色彩管理,所以走 sampler 而不是引擎通道。
     "_SilkStockingsMask":  ("_SilkStockingsMask",  OP_COPY_RGBA),
+    "_StylizedFresnelNoiseMap": ("_StylizedFresnelNoiseMap", OP_COPY_RGBA),
     "_StrokeMap":          ("_StrokeMap",          OP_COPY_RGBA),
     "_LineMap":            ("_LineMap",            OP_COPY_RGBA),
     "_FurMap":             ("_FurMap",             OP_COPY_RGBA),
@@ -134,6 +135,8 @@ FLOAT_DEFAULTS = {
     "_SpecBumpScale": 1.0,
     # characternpr (Standard) 的 _ANISOTROPY_SPECULAR_ON 一套 —— 与下面 hair
     # 的 _AnisotropyValue/_AnisotropyDirX 是两个不同 shader 的不同功能。
+    "_StylizedFresnelPow": 2.0, "_StylizedFresnelAmount": 2.0,
+    "_StylizedFresnelNoiseSpeed": 0.0, "_StylizedNoiseContrast": 1.0,
     "_AnisotropyDirectionMain": 0.0,
     "_AnisotropyIntensityMultiplier": 1.0, "_AnisotropyDirectionAdditional": 0.0,
     "_AnisotropyOffsetAdditional": 0.0,
@@ -190,6 +193,8 @@ FLOAT_IDENTITY = [
     "_SkinRimOffScale", "_FaceRimOffScale", "_EmotionBlend",
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
+    "_StylizedFresnelPow", "_StylizedFresnelAmount",
+    "_StylizedFresnelNoiseSpeed", "_StylizedNoiseContrast",
     "_AnisotropyDirectionMain", "_AnisotropyIntensityMultiplier",
     "_AnisotropyDirectionAdditional", "_AnisotropyOffsetAdditional",
     "_AnisotropyValue", "_AnisotropyValue2", "_AnisotropyDirX", "_AnisotropyIntensity",
@@ -229,7 +234,8 @@ FLOAT_IDENTITY = [
 COLOR_IDENTITY = [
     "_BaseColor", "_EmissionColor", "_SDFRimColor", "_HighlightMapVector",
     "_MatcapColor", "_EyeHighLightColor", "_EyeScatteringColor",
-    "_AnisotropyColor2", "_AnisotropyColorAdditional", "_HairDarkenParams",
+    "_AnisotropyColor2", "_AnisotropyColorAdditional", "_StylizedFresnelColor",
+    "_HairDarkenParams",
     "_SilkStockingsDryColor", "_SilkStockingsWetColor", "_SilkStockingsColor",
     "_ClearCoatColor", "_ParallaxColor",
     "_VFXColor", "_VFXBlendTint", "_VFXSpecialParam", "_VFXFresnelColor",
@@ -297,6 +303,7 @@ BOOL_MAP = {
     "u_UseShadowLut":        "_UseShadowLutTex",
     "u_UseEmission":         "_UseEmission",
     "u_ClearCoat":           "_ClearCoat",
+    "u_StylizedFresnel":     "_EnableStylizedFresnel",
     "u_UseAnisotropy":       "_UseAnisotropy",
     "_AnisotropyUseGeometryTangent": "_AnisotropyUseGeometryTangent",
     "u_SilkStockings":       "_SilkStockings",
@@ -342,6 +349,7 @@ KEYWORD_MAP = {
     "_EMISSION":              "u_UseEmission",
     "_CLEARCOAT":             "u_ClearCoat",
     "_ANISOTROPY_SPECULAR_ON": "u_UseAnisotropy",
+    "_STYLIZED_FRESNEL":      "u_StylizedFresnel",
     "_SILK_STOCKINGS":        "u_SilkStockings",
     "_PARALLAX_MAP":          "u_UseParallax",
     "_SDFLIGHTMAP":           "u_UseSDFLightmap",
@@ -382,6 +390,7 @@ ST_MAP = {
     "_StrokeMap_ST":          "_StrokeMap",
     "_LineMap_ST":            "_LineMap",
     "_ParallaxTex_ST":        "_ParallaxTex",
+    "_StylizedFresnelNoiseMap_ST": "_StylizedFresnelNoiseMap",
     "_FurMap_ST":             "_FurMap",
     "_FurDyeMap_ST":          "_FurDyeMap",
     "_VFXSpecialMainTex_ST":  "_VFXSpecialMainTex",

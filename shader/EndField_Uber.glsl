@@ -161,6 +161,27 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region StylizedFresnel 风格化菲涅尔 (Standard, keyword _STYLIZED_FRESNEL)
+    // 1.4.4 新增。菲涅尔用的是**几何法线**(TEXCOORD_2,顶点法线插值),
+    // 不是法线贴图后的 N —— 参考 _394 就是这么取的。
+    //: param custom { "default": false, "label": "启用风格化菲涅尔 _STYLIZED_FRESNEL", "group": "8 StylizedFresnel 风格化菲涅尔" }
+    uniform bool u_StylizedFresnel;
+    //: param custom { "default": [0.0, 0.0, 0.0, 0.0], "label": "颜色 Color (a=自发光量)", "widget":"color", "group": "8 StylizedFresnel 风格化菲涅尔" }
+    uniform vec4 _StylizedFresnelColor;
+    //: param custom { "default": 2.0, "label": "Pow", "min": 0.0, "max": 10.0, "group": "8 StylizedFresnel 风格化菲涅尔" }
+    uniform float _StylizedFresnelPow;
+    //: param custom { "default": 2.0, "label": "Amount", "min": 0.0, "max": 10.0, "group": "8 StylizedFresnel 风格化菲涅尔" }
+    uniform float _StylizedFresnelAmount;
+    //: param custom { "default": 0.0, "label": "噪声速度 NoiseSpeed", "min": -5.0, "max": 5.0, "group": "8 StylizedFresnel 风格化菲涅尔" }
+    uniform float _StylizedFresnelNoiseSpeed;
+    //: param custom { "default": 1.0, "label": "噪声对比度 NoiseContrast", "min": 0.0, "max": 10.0, "group": "8 StylizedFresnel 风格化菲涅尔" }
+    uniform float _StylizedNoiseContrast;
+    //: param custom { "default": [1.0, 1.0, 0.0, 0.0], "label": "噪声图 ST (xy=Tiling zw=Offset)", "group": "8 StylizedFresnel 风格化菲涅尔" }
+    uniform vec4 _StylizedFresnelNoiseMap_ST;
+    //: param auto { "default": "", "label": "风格化菲涅尔噪声图" }
+    uniform sampler2D _StylizedFresnelNoiseMap;
+  //- endregion
+
   //- region Anisotropy 各向异性高光 (Standard, keyword _ANISOTROPY_SPECULAR_ON)
     // 1.4.4 新增(1.3.3 的基础部位没有这套;Hair 的 _Anisotropy* 是另一套,别混)。
     // 两瓣:主瓣走可见项、第二瓣不走,方向都按 RMOS.g(specScale)加权。
@@ -909,6 +930,26 @@
           silk_tint = lerp(_SilkStockingsDryColor.rgb, _SilkStockingsWetColor.rgb, wet);
       }
 
+      // ---- StylizedFresnel (_STYLIZED_FRESNEL) ----
+      // 参考 Sub0_Pass0_Fragment_b623(ON) vs b543(OFF), _422/_463..465/_3507:
+      //   noise = tex(_NoiseMap, (uv + speed*time) * ST.xy + ST.zw).r
+      //   fres  = saturate(pow(clamp(1 - dot(V, Ngeom), 1e-4, 1), Pow) * Amount)
+      //   mask  = saturate((noise - 0.5) * Contrast + 0.5) * fres
+      //   albedo    = lerp(albedo, Color.rgb, mask)
+      //   emission += mask * Color.a * Color.rgb * alphaPremul
+      // 注意 dot 用的是几何法线 (_394 = TEXCOORD_2),不是法线贴图后的 N。
+      float stylizedFresnelMask = 0.0;
+      if (u_StylizedFresnel) {
+          float2 sfUV = (uv + _StylizedFresnelNoiseSpeed * f_VFXTime)
+                        * _StylizedFresnelNoiseMap_ST.xy + _StylizedFresnelNoiseMap_ST.zw;
+          float sfNoise = texture(_StylizedFresnelNoiseMap, sfUV).r;                 // _380.x
+          float3 Ngeom = normalize(normalWS_raw);                                    // _394
+          float sfFres = clamp(exp2(log2(clamp(1.0 - dot(V, Ngeom), 1e-4, 1.0)) * _StylizedFresnelPow)
+                               * _StylizedFresnelAmount, 0.0, 1.0);
+          stylizedFresnelMask = clamp(mad(sfNoise - 0.5, _StylizedNoiseContrast, 0.5), 0.0, 1.0) * sfFres;
+          albedo = lerp(albedo, _StylizedFresnelColor.rgb, stylizedFresnelMask);     // _463.._465
+      }
+
       // ---- Shadow color ----
       float3 shadowColor;
       if (u_UseShadowLut) {
@@ -1341,6 +1382,11 @@
       }
       if (u_UseParallax) {
           emissionContrib += baseAlpha * parallaxSample * _ParallaxColor.rgb * alphaPremul;
+      }
+      if (u_StylizedFresnel) {
+          // _3507 * _457..459 * _3141 —— Color.a 就是"自发光量"那一位。
+          emissionContrib += (stylizedFresnelMask * _StylizedFresnelColor.a)
+                             * _StylizedFresnelColor.rgb * alphaPremul;
       }
 
       // ==== FINAL ASSEMBLY ====
