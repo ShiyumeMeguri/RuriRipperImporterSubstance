@@ -286,6 +286,7 @@ COLOR_IDENTITY = [
     "_CustomizeBaseColor", "_CustomizeBaseTintColor", "_CustomizeAddTintColor",
     "_ExtraRootTintColor", "_ExtraDepthTintColor",
     "_DissolveEmissiveColor", "_CutOffDirection",
+    "_HairBaseTintColor", "_HairAddTintColor", "_EyeTintColor",
     "_PuppetBaseColor", "_PuppetPatternTintColor", "_PuppetPatternTintEdgeColor",
     "_PuppetPatternSpeed", "_PuppetPDCurveUVScaleSpeed", "_PuppetPDCurveBaseColor",
     "_PuppetPDCurveLightColor", "_PuppetPDCurveEdgeColor",

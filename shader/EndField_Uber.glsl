@@ -529,6 +529,10 @@
     uniform float _MatcapNormalScale;
     //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "Matcap 颜色 (HDR)", "widget":"color", "group": "B Eyes" }
     uniform vec4 _MatcapColor;
+    // 1.4.4 新增:虹膜染色。参考 characternpr_eye b37 的 _393/_395 —— 用
+    // frac(uv)-0.5 的半径判定,**圈内(虹膜)才染色**,圈外(眼白)乘 1 跳过。
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "虹膜染色 EyeTintColor", "widget":"color", "group": "B Eyes" }
+    uniform vec4 _EyeTintColor;
     //: param custom { "default": false, "label": "眼睛高光 _EYE_HIGHLIGHT", "group": "B Eyes" }
     uniform bool u_EyeHighLight;
     //: param custom { "default": [2.0, 2.0, 2.0, 1.0], "label": "眼高光颜色 (HDR)", "widget":"color", "group": "B Eyes" }
@@ -540,6 +544,12 @@
   //- endregion
 
   //- region Hair (Part 3)
+    // 1.4.4 新增:发色两段染色。参考 characternpr_hair b117 的 _464/_493 ——
+    // 遮罩 = baseTex.a * _BaseColor.a,albedo *= lerp(AddTint, BaseTint, 遮罩)。
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "发色 BaseTintColor", "widget":"color", "group": "C Hair" }
+    uniform vec4 _HairBaseTintColor;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "发色 AddTintColor", "widget":"color", "group": "C Hair" }
+    uniform vec4 _HairAddTintColor;
     //: param custom { "default": "", "default_color": [0.5,0.5,1.0,1.0], "label": "高光法线图 SpecNormalMap (标准OpenGL RGB; diffuse 法线请画在 SP 的 Normal 通道)", "usage": "texture", "group": "C Hair" }
     uniform sampler2D _SpecNormalMap;
     //: param custom { "default": true, "label": "启用高光法线 _SPECULAR_NORMALMAP (独立 SpecNormalMap)", "group": "C Hair" }
@@ -2354,6 +2364,13 @@
       float3 albedo = baseSample.rgb * _BaseColor.rgb;
       float  baseAlpha = baseSample.a * _BaseColor.a;
 
+      // ---- 虹膜染色 _EyeTintColor (1.4.4 新增) ----
+      // 参考 characternpr_eye b37 _393/_395:圈内(虹膜)才乘 tint,圈外(眼白)
+      // 乘 1 —— 参考里这个判定是**无条件**算的,不跟 Matcap 绑定。
+      float2 tintFromCenter = frac(uvBase) - 0.5;
+      bool tintOutsideIris = dot(tintFromCenter, tintFromCenter) >= 0.25;
+      albedo *= tintOutsideIris ? float3(1.0) : _EyeTintColor.rgb;
+
       // ---- Exposure ----
       float exposure = (_CharacterParams12.w * (1.0 - _EnvironmentGlobalParams0.x)
                        + _EnvironmentGlobalParams0.x) * _ExposureParams.x;
@@ -3541,21 +3558,10 @@
           // ---- Hair ----
           float3 albedo = baseCol * _BaseColor.rgb;
           float baseAlpha = baseAlphaTex * _BaseColor.a;
+          // 参考 characternpr_hair b117 _464/_493:两段发色染色,遮罩就是 baseAlpha
+          albedo *= lerp(_HairAddTintColor.rgb, _HairBaseTintColor.rgb, baseAlpha);
           color = shadeHair(inputs, inputs.position, inputs.normal, tangentWS, faceSign, albedo, baseAlpha);
-          // 参考 _1824:alpha = smoothstep(viewFade) * ExtraAlphaMask.a * _BaseColor.a
-          float vfAlpha = 1.0;
-          if (_ViewFade > 0.0) {
-              float3 vfN = normalize(inputs.normal);
-              float3 vfV = normalize(camera_pos - inputs.position);
-              float vfBias = 0.2 - _ViewFade;                                  // _1811
-              float vfT = clamp((vfBias + min(abs(dot(vfV, vfN)), 1.0))
-                                / (vfBias + _ViewFade), 0.0, 1.0);             // _1816
-              vfAlpha = (vfT * vfT) * mad(vfT, -2.0, 3.0);
-          }
-          if (u_ExtraAlphaMask) {
-              vfAlpha *= texture(_ExtraAlphaMask, GetBaseUV(inputs)).a;         // _349.w
-          }
-          outAlpha = (u_AlphaBlend ? baseAlphaTex : 1.0) * vfAlpha; // 原: (_SurfaceType==1) ? baseSample.a : 1
+          outAlpha = u_AlphaBlend ? baseAlphaTex : 1.0; // 原: (_SurfaceType==1) ? baseSample.a : 1
       }
       else if (u_CharaPart == 4) {
           // ---- Fur ([H10] 单壳层预览) ----
@@ -3582,7 +3588,20 @@
           float3 albedo = baseCol * _BaseColor.rgb;
           float3 shadowColorUnused;
           color = shadeStandard(inputs, inputs.position, inputs.normal, tangentWS, faceSign, albedo, baseAlphaTex, shadowColorUnused);
-          outAlpha = u_AlphaBlend ? baseAlphaTex : 1.0; // 原: (_SurfaceType==1) ? baseSample.a : 1
+          // 参考 _1824:alpha = smoothstep(viewFade) * ExtraAlphaMask.a * _BaseColor.a
+          float vfAlpha = 1.0;
+          if (_ViewFade > 0.0) {
+              float3 vfN = normalize(inputs.normal);
+              float3 vfV = normalize(camera_pos - inputs.position);
+              float vfBias = 0.2 - _ViewFade;                                  // _1811
+              float vfT = clamp((vfBias + min(abs(dot(vfV, vfN)), 1.0))
+                                / (vfBias + _ViewFade), 0.0, 1.0);             // _1816
+              vfAlpha = (vfT * vfT) * mad(vfT, -2.0, 3.0);
+          }
+          if (u_ExtraAlphaMask) {
+              vfAlpha *= texture(_ExtraAlphaMask, GetBaseUV(inputs)).a;         // _349.w
+          }
+          outAlpha = (u_AlphaBlend ? baseAlphaTex : 1.0) * vfAlpha; // 原: (_SurfaceType==1) ? baseSample.a : 1
           // [H5] ApplyCustomAO: 跳过
       }
 
