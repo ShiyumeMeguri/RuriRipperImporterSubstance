@@ -478,6 +478,30 @@
   //- endregion
 
   //- region Face (Part 1)
+    // 1.4.4 新增:脸部贴花。参考 characternpr_skin b129 的 _425.._529 ——
+    // 中心偏移 → 镜像模式 → 尺寸/翻转 → 旋转 → 亮度遮罩再叠上去。
+    //: param custom { "default": "", "default_color": [0.0,0.0,0.0,0.0], "label": "脸部贴花 FaceDecalMap", "usage": "texture", "group": "A Face" }
+    uniform sampler2D _FaceDecalMap;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "贴花染色 TintColor (a=强度)", "widget":"color", "group": "A Face" }
+    uniform vec4 _FaceDecalTintColor;
+    //: param custom { "default": 0.0, "label": "贴花中心 X", "min": -0.5, "max": 0.5, "group": "A Face" }
+    uniform float _FaceDecalCenterX;
+    //: param custom { "default": 0.0, "label": "贴花中心 Y", "min": -0.5, "max": 0.5, "group": "A Face" }
+    uniform float _FaceDecalCenterY;
+    //: param custom { "default": 0.0, "label": "贴花翻转 X", "min": 0.0, "max": 1.0, "group": "A Face" }
+    uniform float _FaceDecalInvertX;
+    //: param custom { "default": 0.0, "label": "贴花翻转 Y", "min": 0.0, "max": 1.0, "group": "A Face" }
+    uniform float _FaceDecalInvertY;
+    //: param custom { "default": 0.2, "label": "贴花尺寸 Size", "min": 0.05, "max": 2.0, "group": "A Face" }
+    uniform float _FaceDecalSize;
+    //: param custom { "default": 0.0, "label": "贴花旋转 Rotation (0..1 = 一圈)", "min": 0.0, "max": 1.0, "group": "A Face" }
+    uniform float _FaceDecalRotation;
+    //: param custom { "default": 0.0, "label": "贴花镜像模式 (0 单个 / 1 水平 / 2 垂直)", "min": 0.0, "max": 2.0, "group": "A Face" }
+    uniform float _FaceDecalMirrorMode;
+    //: param custom { "default": 0.5, "label": "贴花镜像分割线 MirrorSplit", "min": 0.0, "max": 1.0, "group": "A Face" }
+    uniform float _FaceDecalMirrorSplit;
+    //: param custom { "default": 0.7, "label": "贴花亮度遮罩 BrightnessMask", "min": 0.0, "max": 1.0, "group": "A Face" }
+    uniform float _FaceDecalBrightnessMask;
     //: param custom { "default": false, "label": "使用 SDF Lightmap _SDFLIGHTMAP (mask=user0)", "group": "A Face" }
     uniform bool u_UseSDFLightmap;
     //: param custom { "default": "", "default_color": [0.0,0.0,0.0,1.0], "label": "SDF Lightmap", "usage": "texture", "group": "A Face" }
@@ -1916,6 +1940,44 @@
   // castShadow: SDF on → 1.0 (HGRP 同); off → shadowAtten=1 [H2] 时 smoothstep(1)=1。
   float3 shadeFace(V2F inputs, float3 positionWS, float3 normalWS_raw, float4 tangentWS, float faceSign, float3 albedo, float baseAlpha) {
       float2 uv = GetBaseUV(inputs);
+
+      // ---- FaceDecal 脸部贴花 (1.4.4 新增) ----
+      // 参考 characternpr_skin b129 的 _425.._529,逐条对应:
+      //   _428 镜像量 = saturate(MirrorMode - 1)   _458 1/Size   _474 = -2/Size
+      //   _483 先减中心、再按镜像折返、再乘(翻转后的)缩放
+      //   _495 旋转后采样,UV 夹到 [0,1]
+      //   _507 亮度遮罩:只在反照率最暗通道低于阈值处生效
+      //   _525 albedo = lerp(albedo, decal.rgb*Tint.rgb, Tint.a * decal.a)
+      {
+          bool mirrorOn = _FaceDecalMirrorMode > 0.5;
+          float mirrorAmt = clamp(_FaceDecalMirrorMode - 1.0, 0.0, 1.0);          // _428
+          float invSize = 1.0 / _FaceDecalSize;                                   // _458
+          float invSizeNeg = invSize * -2.0;                                      // _474
+          float rot = _FaceDecalRotation * 6.28318548;
+          float sr = sin(rot), cr = cos(rot);
+
+          float dx = abs(uv.x - _FaceDecalMirrorSplit);                           // _434
+          float cx2 = mad(_FaceDecalCenterX, 0.5, -0.25);                         // _448
+          float px = mirrorOn
+                   ? (mad(mirrorAmt, (dx - 0.5) + uv.x, 0.5 - dx)
+                      - mad(mirrorAmt, _FaceDecalCenterX - cx2, cx2))
+                   : (uv.x - _FaceDecalCenterX);
+          float dy = abs(uv.y - _FaceDecalMirrorSplit);
+          float cy2 = mad(_FaceDecalCenterY, 0.5, -0.25);
+          float py = mirrorOn
+                   ? (mad(mirrorAmt, (0.5 - dy) - uv.y, uv.y)
+                      - mad(mirrorAmt, cy2 - _FaceDecalCenterY, _FaceDecalCenterY))
+                   : (uv.y - _FaceDecalCenterY);
+          float2 dUV = float2((px - 0.5) * mad(_FaceDecalInvertX, invSizeNeg, invSize),
+                              (py - 0.5) * mad(_FaceDecalInvertY, invSizeNeg, invSize));  // _483
+          float2 decalUV = float2(clamp(dot(dUV, float2(cr, sr)) + 0.5, 0.0, 1.0),
+                                  clamp(dot(dUV, float2(-sr, cr)) + 0.5, 0.0, 1.0));
+          float4 decal = texture(_FaceDecalMap, decalUV);                         // _495
+          if (_FaceDecalBrightnessMask >= min(albedo.b, min(albedo.g, albedo.r))) {
+              float w = _FaceDecalTintColor.a * decal.a;                          // _511
+              albedo = lerp(albedo, decal.rgb * _FaceDecalTintColor.rgb, w);      // _525
+          }
+      }
 
       // ---- Object-to-World ([H4]: 单位矩阵世界轴; SP 烘焙网格无需 FBX 旋转修正) ----
       float3 objectRight   = float3(1.0, 0.0, 0.0);
