@@ -414,6 +414,7 @@ KEYWORD_MAP = {
     "_CUSTOMIZE_AVATAR":      "u_CustomizeAvatar",
     "_CHARACTER_EROSION":     "u_CharacterErosion",
     "_PUPPET":                "u_Puppet",
+    "_REALISTIC_LIGHTING":    "u_RealisticLighting",
     "_PUPPET_PROCEDURAL_DCURVE": "u_PuppetProceduralDCurve",
     "_MATCAP_ENV_REFLECTION_ON": "u_MatcapEnvReflection",
     "_SILK_STOCKINGS":        "u_SilkStockings",

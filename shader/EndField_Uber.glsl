@@ -178,6 +178,15 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region RealisticLighting (Standard, keyword _REALISTIC_LIGHTING)
+    // 参考 b403(ON) vs b369(OFF) 的规范化 diff:唯一差别是**去掉两处风格化的
+    // 环境亮度重映射** —— brightMix(0.35L+0.65,再按 CP1.x 混向 clamp(L,1.25,1.75))
+    // 与 brightFull(clamp(L,0,1.5))在 ON 变体里整个不存在,等价于两者都取 1。
+    // 方向性环境包裹(nprNdotL)两条路径都有,不是它带来的。
+    //: param custom { "default": false, "label": "写实光照 _REALISTIC_LIGHTING", "group": "5 渲染设置" }
+    uniform bool u_RealisticLighting;
+  //- endregion
+
   //- region Puppet 傀儡 (Standard/Skin, keyword _PUPPET / _PUPPET_PROCEDURAL_DCURVE)
     // 区域遮罩按 uv.y 上下两段羽化;关掉区域遮罩时退回 RMOS.g(参考 _426/_479)。
     // 两条上色路径共用这一个遮罩:pattern 图 或 程序化 DCurve。
@@ -1528,8 +1537,12 @@
       float3 shadAmb = nprNdotL * (shadowStr * (1.0 - ambCol) + ambCol);
 
       float bright065 = min(ambInt * 0.35 + 0.65, 1.5);
-      float brightFull = clamp(ambInt, 0.0, 1.5);
-      float brightMix = lerp(bright065, clamp(ambInt, 1.25, 1.75), _CharacterParams1.x);
+      // _REALISTIC_LIGHTING 把这两个风格化重映射整个去掉(参考 ON 变体里
+      // _2837/_2829 根本不存在),等价于取 1。
+      float brightFull = u_RealisticLighting ? 1.0 : clamp(ambInt, 0.0, 1.5);
+      float brightMix = u_RealisticLighting
+                      ? 1.0
+                      : lerp(bright065, clamp(ambInt, 1.25, 1.75), _CharacterParams1.x);
       float3 brightAmb = brightMix * shadAmb * _CharacterParams0.w;
 
       float lightLum = dot(blendedLightCol * blendedLightInt, LUM);
