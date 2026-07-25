@@ -161,6 +161,27 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region CustomizeAvatar 换装染色 (Standard, keyword _CUSTOMIZE_AVATAR)
+    // BaseMap 的 RGB 在这条路径下不是颜色而是三张遮罩:
+    //   R = 明度  G = 选哪种 tint  B = 用 BaseColor 还是 tint
+    //: param custom { "default": false, "label": "启用换装染色 _CUSTOMIZE_AVATAR", "group": "A CustomizeAvatar 换装染色" }
+    uniform bool u_CustomizeAvatar;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "Customize BaseColor", "widget":"color", "group": "A CustomizeAvatar 换装染色" }
+    uniform vec4 _CustomizeBaseColor;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "Customize BaseTintColor", "widget":"color", "group": "A CustomizeAvatar 换装染色" }
+    uniform vec4 _CustomizeBaseTintColor;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "Customize AddTintColor", "widget":"color", "group": "A CustomizeAvatar 换装染色" }
+    uniform vec4 _CustomizeAddTintColor;
+  //- endregion
+
+  //- region MatcapEnvReflection (Standard, keyword _MATCAP_ENV_REFLECTION_ON)
+    // 与 Eyes 的 _MATCAP_ON 是**两条**不同路径:这条不是叠加一层高光,而是拿
+    // Matcap 顶替环境反射的采样源。贴图/颜色沿用 Eyes 那组(参考里也是同两个
+    // 属性 _MatcapTex / _MatcapColor)。
+    //: param custom { "default": false, "label": "Matcap 作环境反射 _MATCAP_ENV_REFLECTION_ON", "group": "6 Anisotropy 各向异性" }
+    uniform bool u_MatcapEnvReflection;
+  //- endregion
+
   //- region EnemyHitFlash 受击闪白 (Standard/LiquidAg, keyword _ENEMY_HIT_FLASH)
     // 1.4.4 新增。球形扫描线(世界坐标到中心的距离 remap)+ 独立法线强度的菲涅尔。
     //: param custom { "default": false, "label": "启用受击闪白 _ENEMY_HIT_FLASH", "group": "9 EnemyHitFlash 受击闪白" }
@@ -926,6 +947,16 @@
       SampleRMOS(inputs, metallic, specScale, shadowMask, smoothness);
       float roughnessRaw = 1.0 - smoothness;
 
+      // ---- CustomizeAvatar 换装染色 (_CUSTOMIZE_AVATAR) ----
+      // 参考 Sub0_Pass0_Fragment_b683 的 _362.._379:BaseMap 的 RGB 当遮罩用,
+      // 反照率整个由三个颜色重建 —— 必须在阴影色推导之前做完(参考的
+      // _397.._399 就是拿重建后的 _377.._379 算的)。
+      if (u_CustomizeAvatar) {
+          float3 customTint = lerp(_CustomizeAddTintColor.rgb, _CustomizeBaseTintColor.rgb,
+                                   albedo.g);                                  // _362.._364
+          albedo = albedo.r * lerp(customTint, _CustomizeBaseColor.rgb, albedo.b);  // _377.._379
+      }
+
       // ---- SilkStockings 状态 (_SILK_STOCKINGS) ----
       // 参考: Sub0_Pass0_Fragment_b587 (ON) vs b503 (OFF), 逐条对应
       //   _563  湿润度 -> f_SilkWetness [H14]
@@ -1419,6 +1450,19 @@
       float3 reflDir = reflect(-V, N);
       float cubeMip = log2(max(roughnessRaw, 0.001)) * 1.2 + 5.0;
       float3 cubeSample = envSampleLOD(reflDir, cubeMip).rgb;
+      // _MATCAP_ENV_REFLECTION_ON:Matcap **顶替**环境采样本身,后面的 envBRDF /
+      // reflBoost / cubeAmbInt 一字不动 —— 参考 Sub0_Pass0_Fragment_b473 的
+      //   _3451 * (mad(_3440*_2541, _3181, _3181) * (matcap.rgb * _MatcapColor.rgb)) * _940
+      // 里根本没有 cubeSample 这一项。UV 与 Eyes 那条 matcap 一样是视空间法线。
+      // (注意:参考产物把 t16 的 _MatcapTex 标成了别的名字,这里按**用法**认 ——
+      //  真正的 matcap 是那次 N_view.xy*0.5+0.5 的采样,而被标成 _MatcapTex 的
+      //  那次其实是 DXT5nm 法线解码,即 _BumpMap。)
+      if (u_MatcapEnvReflection) {
+          float3 mcViewN = mat3(uniform_camera_view_matrix) * N;
+          float mcLen = rsqrt(max(dot(mcViewN, mcViewN), 1.175e-38));
+          float2 mcUV = float2(mcViewN.x * mcLen * 0.5 + 0.5, mcViewN.y * mcLen * 0.5 + 0.5);
+          cubeSample = SampleSRGBTex(_MatcapTex, mcUV).rgb * _MatcapColor.rgb;
+      }
 
       float dfgX, dfgY;
       ComputeEnvBRDF(NdotV_spec, roughness, dfgX, dfgY);

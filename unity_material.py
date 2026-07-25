@@ -243,6 +243,7 @@ COLOR_IDENTITY = [
     "_BaseColor", "_EmissionColor", "_SDFRimColor", "_HighlightMapVector",
     "_MatcapColor", "_EyeHighLightColor", "_EyeScatteringColor",
     "_AnisotropyColor2", "_AnisotropyColorAdditional", "_StylizedFresnelColor",
+    "_CustomizeBaseColor", "_CustomizeBaseTintColor", "_CustomizeAddTintColor",
     "_EnemyHitFlashBrightColor", "_EnemyHitFlashFresnelColor",
     "_EnemyHitFlashBrightCenter",
     "_HairDarkenParams",
@@ -313,6 +314,8 @@ BOOL_MAP = {
     "u_UseShadowLut":        "_UseShadowLutTex",
     "u_UseEmission":         "_UseEmission",
     "u_ClearCoat":           "_ClearCoat",
+    "u_CustomizeAvatar":     "_AvatarCustomizeEnable",
+    "u_MatcapEnvReflection": "_UseMatcap",
     "u_EnemyHitFlash":       "_EnableEnemyHitFlash",
     "u_StylizedFresnel":     "_EnableStylizedFresnel",
     "u_UseAnisotropy":       "_UseAnisotropy",
@@ -362,6 +365,8 @@ KEYWORD_MAP = {
     "_ANISOTROPY_SPECULAR_ON": "u_UseAnisotropy",
     "_STYLIZED_FRESNEL":      "u_StylizedFresnel",
     "_ENEMY_HIT_FLASH":       "u_EnemyHitFlash",
+    "_CUSTOMIZE_AVATAR":      "u_CustomizeAvatar",
+    "_MATCAP_ENV_REFLECTION_ON": "u_MatcapEnvReflection",
     "_SILK_STOCKINGS":        "u_SilkStockings",
     "_PARALLAX_MAP":          "u_UseParallax",
     "_SDFLIGHTMAP":           "u_UseSDFLightmap",
@@ -392,6 +397,9 @@ IGNORED_KEYWORDS = {
     "_OUTLINE_MASK": "Painter has no outline pass",
     "_USE_ALCHEMY_AO": "engine AO variant; [H5] skips the sandbox custom AO",
     "_USE_GROUND_TRUTH_AO": "engine AO variant; [H5] skips the sandbox custom AO",
+    "DITHER_SPHERE": ("_DitherSphereRadius/_DitherSphereSmoothness appear ONLY as cbuffer "
+                      "declarations across all 3184 reference dumps -- never read by any "
+                      "fragment (nor any vertex) shader, so there is nothing to port"),
     "_DRAW_UNDER_BROW": "stencil/draw-order only, no fragment effect",
     "DISABLE_DRAW_UNDER_HAIR": "stencil/draw-order only, no fragment effect",
 }
