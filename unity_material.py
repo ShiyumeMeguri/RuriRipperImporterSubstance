@@ -133,8 +133,24 @@ TEXTURE_PRESENCE_BOOLS = {
     "_ExtraAlphaMask": "u_ExtraAlphaMask",
 }
 
-# Unity properties that carry no consumer on the Painter side at all.
+# Unity properties that carry no consumer on the Painter side at all -- each
+# with the evidence, so the list stays honest rather than convenient.
 IGNORED_TEXTURES = ("_OutlineMask", "_HairBrowMask")
+
+#: Scalars the 1.4.4 reference declares but no ForwardLit fragment ever reads.
+#: Verified across all 3184 compiled dumps, not assumed.
+IGNORED_FLOATS = {
+    "_FurColorEnable": "declared in characternpr.shader but referenced by ZERO compiled "
+                       "dumps -- a dead property in 1.4.4",
+    "_FurColor": "same as _FurColorEnable: zero references in any compiled dump",
+    "_FurGravityStrength": "vertex stage only (shell extrusion); [H10] already states "
+                           "Painter cannot do multi-shell fur",
+    "_ResponsiveTransparency": "declared in characternpr.shader but never read by ANY "
+                               "compiled shader (0 non-declaration uses in 3184 dumps)",
+    "_HairBrowMaskThreshold": "only read by Pass1 CharacterOutline / Pass2 "
+                              "DepthOnlyOutline / Pass3 PreGBuffer -- never by Pass0 "
+                              "ForwardLit, which is the only pass Painter renders",
+}
 
 # Scalar/toggle defaults (from the HGRP_*_Fix.shader Properties blocks); used
 # when the .mat omits the property. Anything not listed defaults to 0.
@@ -150,6 +166,7 @@ FLOAT_DEFAULTS = {
     "_SpecBumpScale": 1.0,
     # characternpr (Standard) 的 _ANISOTROPY_SPECULAR_ON 一套 —— 与下面 hair
     # 的 _AnisotropyValue/_AnisotropyDirX 是两个不同 shader 的不同功能。
+    "_VFXMainUVSet": 0.0, "_VFXScreenUVUseDepth": 0.0, "_VFXFresnelUseNormalMap": 0.0,
     "_FaceDecalSize": 0.2, "_FaceDecalBrightnessMask": 0.7,
     "_FaceDecalMirrorSplit": 0.5, "_FaceDecalCenterX": 0.0, "_FaceDecalCenterY": 0.0,
     "_FaceDecalRotation": 0.0, "_FaceDecalMirrorMode": 0.0,
@@ -231,6 +248,7 @@ FLOAT_IDENTITY = [
     "_SkinRimOffScale", "_FaceRimOffScale", "_EmotionBlend",
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
+    "_VFXMainUVSet", "_VFXScreenUVUseDepth", "_VFXFresnelUseNormalMap",
     "_FaceDecalSize", "_FaceDecalBrightnessMask", "_FaceDecalMirrorSplit",
     "_FaceDecalCenterX", "_FaceDecalCenterY", "_FaceDecalRotation",
     "_FaceDecalMirrorMode", "_FaceDecalInvertX", "_FaceDecalInvertY",
@@ -375,6 +393,7 @@ BOOL_MAP = {
     "u_UseEmission":         "_UseEmission",
     "u_ClearCoat":           "_ClearCoat",
     "_PuppetUV2AreaMask":    "_PuppetUV2AreaMask",
+    "_ParallaxUseNormal":    "_ParallaxUseNormal",
     "_UseDissolve":          "_UseDissolve",
     "_UseCutOff":            "_UseCutOff",
     "_DissolveUseViewUV":    "_DissolveUseViewUV",
@@ -474,6 +493,9 @@ IGNORED_KEYWORDS = {
     "DITHER_SPHERE": ("_DitherSphereRadius/_DitherSphereSmoothness appear ONLY as cbuffer "
                       "declarations across all 3184 reference dumps -- never read by any "
                       "fragment (nor any vertex) shader, so there is nothing to port"),
+    "_CHARACTER_FUR": "the Fur path is selected by CharaPart == 4 (infer_chara_part), "
+                      "so the keyword adds nothing on top",
+    "TEXTURE_STREAMING_FEEDBACK_WAVE_OPS": "texture-streaming feedback pass only",
     "_DRAW_UNDER_BROW": "stencil/draw-order only, no fragment effect",
     "DISABLE_DRAW_UNDER_HAIR": "stencil/draw-order only, no fragment effect",
 }

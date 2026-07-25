@@ -161,6 +161,9 @@
     // ViewFade:掠射角按 |dot(N,V)| 淡出 alpha(参考 _1811/_1816/_1824)。
     //: param custom { "default": 0.0, "label": "视角淡出 ViewFade", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
     uniform float _ViewFade;
+    // 视差用哪条法线建 TBN:开=法线贴图后的 N,关=几何法线(参考 _932/_936)。
+    //: param custom { "default": false, "label": "视差使用法线贴图 ParallaxUseNormal", "group": "5 渲染设置" }
+    uniform bool _ParallaxUseNormal;
     //: param custom { "default": 0.0, "label": "AlphaPremultiply", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
     uniform float _AlphaPremultiply;
     //: param custom { "default": true, "label": "EndField Tonemap ACES_modified (SP显示设置Tone mapping请选Linear)", "group": "5 渲染设置" }
@@ -676,6 +679,20 @@
     uniform sampler2D _VFXSpecialMainTex;
     //: param custom { "default": [1.0, 1.0, 0.0, 0.0], "label": "VFXSpecialMainTex_ST", "group": "E Fur VFX" }
     uniform vec4 _VFXSpecialMainTex_ST;
+    // 1.4.4 新增:VFX 主纹理取哪套 UV。0=UV1 1=UV2 2=屏幕空间。
+    // [H12] Painter 这套着色只有 UV0,uv1=uv2=uv0,所以 0/1 之间的 lerp 是恒等;
+    //       屏幕空间那档用 gl_FragCoord 真算(预览有意义)。
+    //: param custom { "default": 0.0, "label": "VFX 主纹理 UV 组 (0/1=UV, 2=屏幕)", "min": 0.0, "max": 2.0, "group": "E Fur VFX" }
+    uniform float _VFXMainUVSet;
+    //: param custom { "default": 0.0, "label": "屏幕 UV 受相机距离影响 ScreenUVUseDepth", "min": 0.0, "max": 1.0, "group": "E Fur VFX" }
+    uniform float _VFXScreenUVUseDepth;
+    //: param custom { "default": 0.0, "label": "VFX 菲涅尔用法线贴图 FresnelUseNormalMap", "min": 0.0, "max": 1.0, "group": "E Fur VFX" }
+    uniform float _VFXFresnelUseNormalMap;
+    // [H17] 屏幕 UV 需要分辨率(参考取 _ScreenParams)。这版 Painter 的
+    //       auto 参数表里没有可确认的 screen_size,不猜名字(猜错会整个
+    //       shader 创建失败),做成可填的分辨率,数学与参考一致。
+    //: param custom { "default": [1920.0, 1080.0], "label": "[H17] 屏幕分辨率 (VFX 屏幕 UV 用)", "group": "E Fur VFX" }
+    uniform vec2 f_ScreenSize;
     //: param custom { "default": 0.0, "label": "主纹理R作Alpha UseVFXMainTexAsAlpha", "min": 0.0, "max": 1.0, "group": "E Fur VFX" }
     uniform float _UseVFXMainTexAsAlpha;
     //: param custom { "default": "", "default_color": [0.0,0.0,0.0,0.0], "label": "VFX 混合纹理 SpecialBlendTex", "usage": "texture", "group": "E Fur VFX" }
@@ -1503,7 +1520,8 @@
       // ---- Steep Parallax Mapping (SampleGrad → textureGrad, 数学不变) ----
       float parallaxSample = 0.0;
       if (u_UseParallax && height_tex.is_set) {
-          float3 pxNrm = normalize(normalWS_raw);
+          // _ParallaxUseNormal:参考 _936 在两条法线之间二选一
+          float3 pxNrm = _ParallaxUseNormal ? N : normalize(normalWS_raw);
           float3 pxTan = normalize(tangentWS.xyz);
           float3 pxBit = cross(pxNrm, pxTan) * tangentWS.w;
           float3 tbnV = float3(dot(pxTan, V), dot(pxBit, V), dot(pxNrm, V));
@@ -3096,7 +3114,15 @@
           );
           vfxBlendSmp = SampleSRGBTex(_VFXSpecialBlendTex, vfxBlendUV); // sRGBTexture=1
 
-          float2 vfxDistortUV = uv + vfxBlendSmp.r * _VFXSpecialBlendTexRForDisturb;
+          // 参考 _2887:>1.5 走屏幕空间,否则在 UV1/UV2 之间 lerp([H12] 两者都是 uv0)
+          float2 vfxBaseUV = uv;
+          if (_VFXMainUVSet > 1.5) {
+              float depthScale = mad(_VFXScreenUVUseDepth,
+                                     max(-(positionWS.z), 0.0) - 1.0, 1.0);        // _2932
+              float2 ndc = gl_FragCoord.xy / max(f_ScreenSize, float2(1.0));
+              vfxBaseUV = depthScale * (ndc * 2.0 - 1.0);
+          }
+          float2 vfxDistortUV = vfxBaseUV + vfxBlendSmp.r * _VFXSpecialBlendTexRForDisturb;
           float2 vfxMainUV = float2(
               mad(mad(_VFXSpecialParam.x, vfxTime, vfxDistortUV.x), _VFXSpecialMainTex_ST.x, _VFXSpecialMainTex_ST.z),
               mad(mad(_VFXSpecialParam.y, vfxTime, vfxDistortUV.y), _VFXSpecialMainTex_ST.y, _VFXSpecialMainTex_ST.w)
@@ -3106,7 +3132,8 @@
           vfxTexAlpha = lerp(vfxMainSmp.a, vfxMainSmp.r, _UseVFXMainTexAsAlpha);
           vfxMainRGB = lerp(vfxMainSmp.rgb, float3(1.0), _UseVFXMainTexAsAlpha);
 
-          float3 vfxGeomN = normalize(normalWS_raw);
+          // 参考 _3041:FresnelUseNormalMap < 0.5 用几何法线,否则用法线贴图后的 N
+          float3 vfxGeomN = (_VFXFresnelUseNormalMap < 0.5) ? normalize(normalWS_raw) : N;
           float vfxFresnel = exp2(log2(saturate(dot(V, vfxGeomN) + _VFXFresnelBias)) * _VFXFresnelPower);
           vfxFresnelFlipped = lerp(1.0 - vfxFresnel, vfxFresnel, _VFXFresnelFlip);
 
