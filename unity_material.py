@@ -110,6 +110,7 @@ TEXTURE_PARAMS = {
     "_ExtraAlphaMask":     ("_ExtraAlphaMask",     OP_COPY_RGBA),
     "_ErosionNormalSmoothnessMap": ("_ErosionNormalSmoothnessMap", OP_COPY_RGBA),
     "_ErosionPatternMap":  ("_ErosionPatternMap",  OP_COPY_RGBA),
+    "_PuppetPatternMap":   ("_PuppetPatternMap",   OP_COPY_RGBA),
     "_StrokeMap":          ("_StrokeMap",          OP_COPY_RGBA),
     "_LineMap":            ("_LineMap",            OP_COPY_RGBA),
     "_FurMap":             ("_FurMap",             OP_COPY_RGBA),
@@ -147,6 +148,11 @@ FLOAT_DEFAULTS = {
     "_SpecBumpScale": 1.0,
     # characternpr (Standard) 的 _ANISOTROPY_SPECULAR_ON 一套 —— 与下面 hair
     # 的 _AnisotropyValue/_AnisotropyDirX 是两个不同 shader 的不同功能。
+    "_PuppetMaskLocationDown": 0.1, "_PuppetMaskLocationTop": 0.5,
+    "_PuppetMaskSmooth": 0.1, "_PuppetPatternTintEdgeLocation": 1.0,
+    "_PuppetMetallic": 0.0, "_PuppetRoughness": 1.0,
+    "_PuppetPDCurveDistortSpeed": 0.5, "_PuppetPDCurveDistortPeriodSpeed": 0.5,
+    "_PuppetPDCurveEdgeLocation": 0.3,
     "_ErosionMetallic": 0.5, "_ErosionSmoothnessBias": 0.0, "_ErosionNormalScale": 1.0,
     "_ErosionBaseRootColorLocation": 0.1, "_ErosionBaseRootColorSmooth": 0.1,
     "_ErosionBaseTopColorLocation": 0.7, "_ErosionBaseTopColorSmooth": 0.1,
@@ -215,6 +221,10 @@ FLOAT_IDENTITY = [
     "_SkinRimOffScale", "_FaceRimOffScale", "_EmotionBlend",
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
+    "_PuppetMaskLocationDown", "_PuppetMaskLocationTop", "_PuppetMaskSmooth",
+    "_PuppetPatternTintEdgeLocation", "_PuppetMetallic", "_PuppetRoughness",
+    "_PuppetPDCurveDistortSpeed", "_PuppetPDCurveDistortPeriodSpeed",
+    "_PuppetPDCurveEdgeLocation",
     "_ErosionMetallic", "_ErosionSmoothnessBias", "_ErosionNormalScale",
     "_ErosionBaseRootColorLocation", "_ErosionBaseRootColorSmooth",
     "_ErosionBaseTopColorLocation", "_ErosionBaseTopColorSmooth",
@@ -268,6 +278,9 @@ COLOR_IDENTITY = [
     "_AnisotropyColor2", "_AnisotropyColorAdditional", "_StylizedFresnelColor",
     "_CustomizeBaseColor", "_CustomizeBaseTintColor", "_CustomizeAddTintColor",
     "_ExtraRootTintColor", "_ExtraDepthTintColor",
+    "_PuppetBaseColor", "_PuppetPatternTintColor", "_PuppetPatternTintEdgeColor",
+    "_PuppetPatternSpeed", "_PuppetPDCurveUVScaleSpeed", "_PuppetPDCurveBaseColor",
+    "_PuppetPDCurveLightColor", "_PuppetPDCurveEdgeColor",
     "_ErosionBaseColor", "_ErosionBaseRootColor", "_ErosionBaseTopColor",
     "_ErosionPatternTintColor",
     "_BaseMapUVSpeed", "_EmissionMapUVSpeed",
@@ -341,6 +354,9 @@ BOOL_MAP = {
     "u_UseShadowLut":        "_UseShadowLutTex",
     "u_UseEmission":         "_UseEmission",
     "u_ClearCoat":           "_ClearCoat",
+    "_PuppetUV2AreaMask":    "_PuppetUV2AreaMask",
+    "_PuppetPatternMapUseRGB": "_PuppetPatternMapUseRGB",
+    "u_PuppetProceduralDCurve": "_PuppetProceduralDCurveEnable",
     "u_CharacterErosion":    "_UseCharacterErosion",
     "_ErosionUV2Tint":       "_ErosionUV2Tint",
     "_EmissionAlphaBrightBreath": "_EmissionAlphaBrightBreath",
@@ -397,6 +413,8 @@ KEYWORD_MAP = {
     "_ENEMY_HIT_FLASH":       "u_EnemyHitFlash",
     "_CUSTOMIZE_AVATAR":      "u_CustomizeAvatar",
     "_CHARACTER_EROSION":     "u_CharacterErosion",
+    "_PUPPET":                "u_Puppet",
+    "_PUPPET_PROCEDURAL_DCURVE": "u_PuppetProceduralDCurve",
     "_MATCAP_ENV_REFLECTION_ON": "u_MatcapEnvReflection",
     "_SILK_STOCKINGS":        "u_SilkStockings",
     "_PARALLAX_MAP":          "u_UseParallax",
@@ -443,6 +461,7 @@ ST_MAP = {
     "_ParallaxTex_ST":        "_ParallaxTex",
     "_ErosionNormalSmoothnessMap_ST": "_ErosionNormalSmoothnessMap",
     "_ErosionPatternMap_ST":  "_ErosionPatternMap",
+    "_PuppetPatternMap_ST":   "_PuppetPatternMap",
     "_StylizedFresnelNoiseMap_ST": "_StylizedFresnelNoiseMap",
     "_FurMap_ST":             "_FurMap",
     "_FurDyeMap_ST":          "_FurDyeMap",
@@ -665,10 +684,15 @@ def build_plan(name, guid, document, texture_exists, face_basis=None):
     # read, and the port is verified against it); the shader keyword covers a
     # material that only carries the keyword, and any disagreement is reported.
     active_keywords = props.keywords
-    for shader_name, unity_name in BOOL_MAP.items():
+    # Some keywords have no property in the reference Properties block at all
+    # (_PUPPET is one): the game enables them, the inspector never does. Those
+    # uniforms are keyword-only -- give them an entry so they still resolve.
+    keyword_only = {uniform: None for uniform in KEYWORD_MAP.values()
+                    if uniform not in BOOL_MAP}
+    for shader_name, unity_name in list(BOOL_MAP.items()) + list(keyword_only.items()):
         keyword = _UNIFORM_KEYWORD.get(shader_name)
         keyword_on = keyword in active_keywords if keyword else None
-        if unity_name in floats:
+        if unity_name is not None and unity_name in floats:
             value = bool(floats[unity_name] > 0.5)
             if keyword_on is not None and keyword_on != value:
                 plan.warnings.append(

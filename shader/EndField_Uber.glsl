@@ -178,6 +178,58 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region Puppet 傀儡 (Standard/Skin, keyword _PUPPET / _PUPPET_PROCEDURAL_DCURVE)
+    // 区域遮罩按 uv.y 上下两段羽化;关掉区域遮罩时退回 RMOS.g(参考 _426/_479)。
+    // 两条上色路径共用这一个遮罩:pattern 图 或 程序化 DCurve。
+    //: param custom { "default": false, "label": "启用傀儡 _PUPPET", "group": "C Puppet 傀儡" }
+    uniform bool u_Puppet;
+    //: param custom { "default": false, "label": "UV2 区域遮罩 PuppetUV2AreaMask", "group": "C Puppet 傀儡" }
+    uniform bool _PuppetUV2AreaMask;
+    //: param custom { "default": 0.1, "label": "遮罩下沿 MaskLocationDown", "min": 0.0, "max": 0.9, "group": "C Puppet 傀儡" }
+    uniform float _PuppetMaskLocationDown;
+    //: param custom { "default": 0.5, "label": "遮罩上沿 MaskLocationTop", "min": 0.0, "max": 0.9, "group": "C Puppet 傀儡" }
+    uniform float _PuppetMaskLocationTop;
+    //: param custom { "default": 0.1, "label": "遮罩羽化 MaskSmooth", "min": 0.01, "max": 0.25, "group": "C Puppet 傀儡" }
+    uniform float _PuppetMaskSmooth;
+    //: param custom { "default": "", "default_color": [0.0,0.0,0.0,1.0], "label": "傀儡 Pattern 图", "usage": "texture", "group": "C Puppet 傀儡" }
+    uniform sampler2D _PuppetPatternMap;
+    //: param custom { "default": [1.0, 1.0, 0.0, 0.0], "label": "Pattern 图 ST", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetPatternMap_ST;
+    //: param custom { "default": [0.0, 0.0, 0.0, 0.0], "label": "Pattern 滚动速度", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetPatternSpeed;
+    //: param custom { "default": false, "label": "Pattern 直接用 RGB PatternMapUseRGB", "group": "C Puppet 傀儡" }
+    uniform bool _PuppetPatternMapUseRGB;
+    //: param custom { "default": [0.5, 0.65, 0.8, 1.0], "label": "傀儡 BaseColor", "widget":"color", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetBaseColor;
+    //: param custom { "default": [0.4, 0.2, 0.94, 1.0], "label": "Pattern 染色 TintColor", "widget":"color", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetPatternTintColor;
+    //: param custom { "default": [0.0, 0.0, 0.0, 0.0], "label": "Pattern 边缘色 TintEdgeColor", "widget":"color", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetPatternTintEdgeColor;
+    //: param custom { "default": 1.0, "label": "Pattern 边缘位置 (1=不用)", "min": 0.01, "max": 1.0, "group": "C Puppet 傀儡" }
+    uniform float _PuppetPatternTintEdgeLocation;
+    //: param custom { "default": 0.0, "label": "傀儡 Metallic", "min": 0.0, "max": 1.0, "group": "C Puppet 傀儡" }
+    uniform float _PuppetMetallic;
+    //: param custom { "default": 1.0, "label": "傀儡 Roughness", "min": 0.0, "max": 1.0, "group": "C Puppet 傀儡" }
+    uniform float _PuppetRoughness;
+    // --- 程序化 DCurve(_PUPPET_PROCEDURAL_DCURVE):7 段 cos 域扭曲 + 1/|sin| 脊线 ---
+    //: param custom { "default": false, "label": "程序化 DCurve _PUPPET_PROCEDURAL_DCURVE", "group": "C Puppet 傀儡" }
+    uniform bool u_PuppetProceduralDCurve;
+    //: param custom { "default": [120.0, 12.0, 0.0, -0.06], "label": "DCurve UV 缩放(xy) 速度(zw)", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetPDCurveUVScaleSpeed;
+    //: param custom { "default": 0.5, "label": "DCurve 扭曲速度 DistortSpeed", "min": -10.0, "max": 10.0, "group": "C Puppet 傀儡" }
+    uniform float _PuppetPDCurveDistortSpeed;
+    //: param custom { "default": 0.5, "label": "DCurve 周期速度 PeriodSpeed", "min": -10.0, "max": 10.0, "group": "C Puppet 傀儡" }
+    uniform float _PuppetPDCurveDistortPeriodSpeed;
+    //: param custom { "default": [0.39, 0.58, 0.7, 1.0], "label": "DCurve BaseColor", "widget":"color", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetPDCurveBaseColor;
+    //: param custom { "default": [0.57, 0.3, 0.83, 0.5], "label": "DCurve LightColor (a=强度)", "widget":"color", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetPDCurveLightColor;
+    //: param custom { "default": [0.45, 0.38, 0.73, 0.5], "label": "DCurve EdgeColor (a=强度)", "widget":"color", "group": "C Puppet 傀儡" }
+    uniform vec4 _PuppetPDCurveEdgeColor;
+    //: param custom { "default": 0.3, "label": "DCurve 边缘位置 (1=不用)", "min": 0.01, "max": 1.0, "group": "C Puppet 傀儡" }
+    uniform float _PuppetPDCurveEdgeLocation;
+  //- endregion
+
   //- region CharacterErosion 侵蚀 (Standard, keyword _CHARACTER_EROSION)
     // 1.4.4 新增。遮罩就是 RMOS.g(与各向异性同一位,但两个 keyword 互斥)。
     // 三段色按 UV.y 位置分层 + pattern 图着色,并接管 metallic / 粗糙度 / 法线。
@@ -1165,6 +1217,73 @@
 
       // ---- Normal map ----
       float3 N = SampleBumpNormal(inputs, normalWS_raw, tangentWS, faceSign, _BumpScale);
+
+      // ---- Puppet 傀儡 (_PUPPET / _PUPPET_PROCEDURAL_DCURVE) ----
+      // 参考 Sub0_Pass0_Fragment_b611(_PUPPET)与 b1323(DCurve)。两条上色路径
+      // 共用同一个区域遮罩 _426/_479;关掉区域遮罩时遮罩退回 RMOS.g。
+      if (u_Puppet || u_PuppetProceduralDCurve) {
+          float pTop = _PuppetMaskSmooth + _PuppetMaskLocationTop;               // _399
+          float pDown = _PuppetMaskSmooth - _PuppetMaskLocationDown;             // _402
+          float tTopP = clamp((uv.y - pTop)
+                              / ((_PuppetMaskLocationTop - _PuppetMaskSmooth) - pTop), 0.0, 1.0);
+          float tDownP = clamp((pDown + uv.y)
+                               / (pDown + (_PuppetMaskSmooth + _PuppetMaskLocationDown)), 0.0, 1.0);
+          float pMask = _PuppetUV2AreaMask
+                      ? ((tDownP * tDownP) * mad(tDownP, -2.0, 3.0))
+                        * ((tTopP * tTopP) * mad(tTopP, -2.0, 3.0))
+                      : specScale;                                               // _426 / _479
+
+          float3 pCol;
+          if (u_PuppetProceduralDCurve) {
+              // 7 段 cos 域扭曲(_507.._533),再取 0.1/|sin| 的脊线(_551)
+              float t = f_VFXTime;
+              float u0 = mad(_PuppetPDCurveUVScaleSpeed.z, t, uv.x) * _PuppetPDCurveUVScaleSpeed.x;
+              float v0 = mad(_PuppetPDCurveUVScaleSpeed.w, t, uv.y) * _PuppetPDCurveUVScaleSpeed.y;
+              float d = t * _PuppetPDCurveDistortSpeed;
+              float x1 = mad(cos(mad(v0, 2.5, d)), 0.6, u0);
+              float y1 = mad(cos(mad(x1, 1.5, d)), 0.6, v0);
+              float x2 = mad(cos(mad(y1, 5.0, d)), 0.3, x1);
+              float y2 = mad(cos(mad(x2, 3.0, d)), 0.3, y1);
+              float x3 = mad(cos(mad(y2, 7.5, d)), 0.2, x2);
+              float y3 = mad(cos(mad(x3, 4.5, d)), 0.2, y2);
+              float x4 = mad(cos(mad(y3, 10.0, d)), 0.15, x3);
+              float ridge = min(0.1 / abs(sin(mad(_PuppetPDCurveDistortPeriodSpeed, t, -x4)
+                                               - mad(cos(mad(x4, 6.0, d)), 0.15, y3))), 1.0);
+              float lit = clamp(ridge / _PuppetPDCurveEdgeLocation, 0.0, 1.0)
+                          * _PuppetPDCurveLightColor.a;                          // _564
+              pCol = lerp(_PuppetPDCurveBaseColor.rgb, _PuppetPDCurveLightColor.rgb, lit);
+              if (_PuppetPDCurveEdgeLocation != 1.0) {
+                  float edge = clamp((ridge - _PuppetPDCurveEdgeLocation)
+                                     / (1.0 - _PuppetPDCurveEdgeLocation), 0.0, 1.0)
+                               * _PuppetPDCurveEdgeColor.a;                      // _600
+                  pCol = lerp(pCol, _PuppetPDCurveEdgeColor.rgb, edge);
+              }
+          } else {
+              float2 patUV = float2(mad(_PuppetPatternSpeed.x, f_VFXTime, uv.x),
+                                    mad(_PuppetPatternSpeed.y, f_VFXTime, uv.y))
+                             * _PuppetPatternMap_ST.xy + _PuppetPatternMap_ST.zw;
+              float4 pat = texture(_PuppetPatternMap, patUV);                    // _452
+              if (_PuppetPatternMapUseRGB) {
+                  pCol = pat.rgb;
+              } else {
+                  float e = clamp(pat.r / _PuppetPatternTintEdgeLocation, 0.0, 1.0);   // _463
+                  pCol = lerp(_PuppetBaseColor.rgb, _PuppetPatternTintColor.rgb, e);   // _479
+                  if (_PuppetPatternTintEdgeLocation != 1.0) {
+                      float edge = clamp((pat.r - _PuppetPatternTintEdgeLocation)
+                                         / (1.0 - _PuppetPatternTintEdgeLocation), 0.0, 1.0);
+                      pCol = lerp(pCol, _PuppetPatternTintEdgeColor.rgb, edge);        // _486
+                  }
+              }
+              // metallic / 粗糙度只在 pattern 路径接管(DCurve 变体不带这两条)
+              metallic = lerp(metallic, _PuppetMetallic * (1.0 - pat.r), pMask);       // _554
+              roughnessRaw = mad(pMask,
+                                 (smoothness - 1.0) + lerp(_PuppetRoughness, 0.8, pat.r),
+                                 1.0 - smoothness);                                    // _566
+          }
+          float3 puppetAlbedo = lerp(albedo, pCol, pMask);                       // _519 / _634
+          shadowColor = lerp(shadowColor, puppetAlbedo * 0.5, pMask);            // _543
+          albedo = puppetAlbedo;
+      }
 
       // ---- CharacterErosion 侵蚀 (_CHARACTER_EROSION) ----
       // 参考 Sub0_Pass0_Fragment_b1289 的 _418.._707。遮罩 = RMOS.g(_343),
