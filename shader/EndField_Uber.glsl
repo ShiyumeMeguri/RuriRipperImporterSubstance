@@ -155,6 +155,13 @@
   //- region 渲染设置
     //: param custom { "default": false, "label": "半透明混合 AlphaBlend", "group": "5 渲染设置" }
     uniform_specialization bool u_AlphaBlend;
+    // 裁切只在 `_ALPHATEST_ON`(`_AlphaClip` 属性)开着时才咬。参考里 Pass0 的
+    // clip 全部落在带该 keyword 的变体里:characternpr 51 处、_hair 15 处,
+    // 而 _skin / _eye / _liquidag 的 Pass0 对 _AlphaClipThreshold **零引用** ——
+    // 这几个部位的 _BaseMap.a 根本不是不透明度(眼睛那份是散射遮罩,见
+    // shadeEyes 的 _EyeScatteringColor),拿它裁切会把眼球捅出窟窿。
+    //: param custom { "default": false, "label": "开启透明裁切 AlphaClip", "group": "5 渲染设置" }
+    uniform_specialization bool u_AlphaClip;
     // 参考的 _AlphaClipThreshold(Range(0,1) 默认 0.5)—— 是真材质属性,不是手填。
     //: param custom { "default": 0.5, "label": "透明裁切阈值 AlphaClipThreshold", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
     uniform float _AlphaClipThreshold;
@@ -184,6 +191,19 @@
     // (Painter 里唯一的浸润消费者就是丝袜的 f_SilkWetness [H14])。
     //: param custom { "default": 0.0, "label": "关闭材质受雨 DisableRainEffectOnMaterial", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
     uniform float _DisableRainEffectOnMaterial;
+    // liquidag 的 _ALPHA_SCENE_DEPTH_FADE:靠近场景表面时淡出。
+    //   fade  = 1 - exp2(-|sceneDepth - fragDepth| * DepthFadeExp)
+    //   alpha = max(max(fade,0) * DepthFadeValue, baseAlpha)
+    // [H11] 场景深度 Painter 完全没有(与发丝深度边缘同一堵墙)→ 用一根
+    //       "接近程度"滑条代替 |sceneDepth - fragDepth| 那一项,其余数学不动。
+    //: param custom { "default": false, "label": "场景深度淡出 _ALPHA_SCENE_DEPTH_FADE", "group": "5 渲染设置" }
+    uniform bool u_AlphaSceneDepthFade;
+    //: param custom { "default": 0.0, "label": "深度淡出量 DepthFadeValue", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
+    uniform float _DepthFadeValue;
+    //: param custom { "default": 1.0, "label": "深度淡出指数 DepthFadeExp", "min": 0.0, "max": 20.0, "group": "5 渲染设置" }
+    uniform float _DepthFadeExp;
+    //: param custom { "default": 1.0, "label": "[H11] 与场景表面的距离 (代替场景深度)", "min": 0.0, "max": 10.0, "group": "5 渲染设置" }
+    uniform float f_SceneDepthDistance;
     // 视差用哪条法线建 TBN:开=法线贴图后的 N,关=几何法线(参考 _932/_936)。
     //: param custom { "default": false, "label": "视差使用法线贴图 ParallaxUseNormal", "group": "5 渲染设置" }
     uniform bool _ParallaxUseNormal;
@@ -3689,11 +3709,15 @@
           }
           color = shadeFace(inputs, inputs.position, inputs.normal, tangentWS, faceSign, albedo, baseAlphaTex);
           outAlpha = 1.0; // HGRP Skin ForwardLit 输出 alpha=1
+          skipDefaultClip = true; // characternpr_skin 的 Pass0 从不裁切
       }
       else if (u_CharaPart == 2 || u_CharaPart == 5) {
           // ---- Eyes / Eyebrow (Eyebrow = 无 Matcap 路径) ----
           color = shadeEyes(inputs, inputs.position, inputs.normal, tangentWS, isFrontFace, u_CharaPart == 2);
           outAlpha = 1.0; // HGRP Eye 输出 alpha=1
+          // characternpr_eye 的 Pass0 从不裁切:_BaseMap.a 是虹膜散射遮罩,
+          // 当不透明度用会把眼白/虹膜整片打穿(SV_Target.w 参考里根本没写)。
+          skipDefaultClip = true;
       }
       else if (u_CharaPart == 3) {
           // ---- Hair ----
@@ -3743,13 +3767,20 @@
               vfAlpha *= texture(_ExtraAlphaMask, GetBaseUV(inputs)).a;         // _349.w
           }
           outAlpha = (u_AlphaBlend ? baseAlphaTex : 1.0) * vfAlpha; // 原: (_SurfaceType==1) ? baseSample.a : 1
+          if (u_AlphaSceneDepthFade) {
+              // 参考 _1874/_1881(liquidag)
+              float sdFade = 1.0 - exp2(abs(f_SceneDepthDistance) * (-_DepthFadeExp));
+              outAlpha = max(max(sdFade, 0.0) * _DepthFadeValue,
+                             baseAlphaTex * _BaseColor.a);
+          }
           // [H5] ApplyCustomAO: 跳过
       }
 
       // ---- Alpha 输出 / 裁切 (与旧版工作流一致) ----
       if (u_AlphaBlend || forceAlphaBlend) {
           alphaOutput(outAlpha);
-      } else if (!skipDefaultClip) {
+      } else if (u_AlphaClip && !skipDefaultClip) {
+          // 参考 characternpr_hair b*:clip(baseAlpha * _BaseColor.a - _AlphaClipThreshold)
           float clipA = baseAlphaTex * _BaseColor.a;
           if (clipA < _AlphaClipThreshold) discard;
       }

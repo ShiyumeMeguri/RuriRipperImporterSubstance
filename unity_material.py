@@ -169,6 +169,7 @@ FLOAT_DEFAULTS = {
     # 参考默认 2 = Unity Cull Back = 只画正面。
     "_Cull": 2.0,
     "_DitherSphereRadius": 0.0, "_DitherSphereSmoothness": 0.1,
+    "_DepthFadeValue": 0.0, "_DepthFadeExp": 1.0,
     "_DisableRainEffectOnMaterial": 0.0,
     "_VFXMainUVSet": 0.0, "_VFXScreenUVUseDepth": 0.0, "_VFXFresnelUseNormalMap": 0.0,
     "_FaceDecalSize": 0.2, "_FaceDecalBrightnessMask": 0.7,
@@ -253,6 +254,7 @@ FLOAT_IDENTITY = [
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
     "_Cull", "_DitherSphereRadius", "_DitherSphereSmoothness",
+    "_DepthFadeValue", "_DepthFadeExp",
     "_DisableRainEffectOnMaterial",
     "_VFXMainUVSet", "_VFXScreenUVUseDepth", "_VFXFresnelUseNormalMap",
     "_FaceDecalSize", "_FaceDecalBrightnessMask", "_FaceDecalMirrorSplit",
@@ -450,6 +452,7 @@ BOOL_MAP = {
 # parameter labels -- not inferred from the data.
 KEYWORD_MAP = {
     "DITHER_SPHERE":          "u_DitherSphere",
+    "_ALPHA_SCENE_DEPTH_FADE": "u_AlphaSceneDepthFade",
     "_NORMALMAP":             "u_UseBumpMap",
     "_METALLICSPECGLOSSMAP":  "u_UseMetallicGlossMap",
     "_DIFF_RAMP_ON":          "u_UseDiffRamp",
@@ -491,15 +494,13 @@ _UNIFORM_KEYWORD = {uniform: keyword for keyword, uniform in KEYWORD_MAP.items()
 # reason. Listing them is what keeps the "unhandled keyword" report honest.
 IGNORED_KEYWORDS = {
     "_ALPHABLEND_ON": "surface type is taken from _SurfaceType (see u_AlphaBlend)",
+    "_ALPHATEST_ON": "folded into u_AlphaClip together with _AlphaClip/_EnableAlphaTest",
     "_FBXROTATIONFIX_ON": "deliberately unmapped -- it rotates the hair anisotropy axis "
                           "90 degrees on Painter's world-baked mesh (see BOOL_MAP)",
     "_ADVANCEDOPTION_ON": "editor-only shader GUI toggle",
     "_OUTLINE_MASK": "Painter has no outline pass",
     "_USE_ALCHEMY_AO": "engine AO variant; [H5] skips the sandbox custom AO",
     "_USE_GROUND_TRUTH_AO": "engine AO variant; [H5] skips the sandbox custom AO",
-    "_ALPHA_SCENE_DEPTH_FADE": "reads _CameraDepthTexture (scene depth); Painter has no "
-                               "scene depth at all -- the same wall [H11] already "
-                               "documents for hair's depth-edge mask",
     "_CHARACTER_FUR": "the Fur path is selected by CharaPart == 4 (infer_chara_part), "
                       "so the keyword adds nothing on top",
     "TEXTURE_STREAMING_FEEDBACK_WAVE_OPS": "texture-streaming feedback pass only",
@@ -768,10 +769,13 @@ def build_plan(name, guid, document, texture_exists, face_basis=None):
     # -- scalars --
     for prop in FLOAT_IDENTITY:
         uniforms[prop] = scalar(prop)
-    # Alpha clip only bites when one of the alpha-test switches is on.
-    alpha_test = (floats.get("_AlphaClip", 0.0) > 0.5
-                  or floats.get("_EnableAlphaTest", 0.0) > 0.5)
-    uniforms["f_AlphaClip"] = float(floats.get("_AlphaClipThreshold", 0.5)) if alpha_test else 0.0
+    # Alpha clip only bites when one of the alpha-test switches is on -- the
+    # reference gates every Pass0 clip behind _ALPHATEST_ON. Without this gate
+    # the 0.5 default threshold would clip parts whose _BaseMap.a is a data
+    # mask rather than opacity (eye scattering, face), punching holes in them.
+    uniforms["u_AlphaClip"] = (floats.get("_AlphaClip", 0.0) > 0.5
+                               or floats.get("_EnableAlphaTest", 0.0) > 0.5
+                               or "_ALPHATEST_ON" in active_keywords)
     # Eyes carry their own parallax strength uniform (domain 0..0.15, unlike
     # Standard's _ParallaxScale, which stays in the table -- the shader simply
     # does not read it on these parts).
