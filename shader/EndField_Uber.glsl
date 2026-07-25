@@ -161,6 +161,25 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region Anisotropy 各向异性高光 (Standard, keyword _ANISOTROPY_SPECULAR_ON)
+    // 1.4.4 新增(1.3.3 的基础部位没有这套;Hair 的 _Anisotropy* 是另一套,别混)。
+    // 两瓣:主瓣走可见项、第二瓣不走,方向都按 RMOS.g(specScale)加权。
+    //: param custom { "default": false, "label": "启用各向异性 _ANISOTROPY_SPECULAR_ON", "group": "6 Anisotropy 各向异性" }
+    uniform bool u_UseAnisotropy;
+    //: param custom { "default": true, "label": "使用模型切线 UseGeometryTangent", "group": "6 Anisotropy 各向异性" }
+    uniform bool _AnisotropyUseGeometryTangent;
+    //: param custom { "default": 0.0, "label": "基础各向异性高光方向 DirectionMain", "min": -1.0, "max": 1.0, "group": "6 Anisotropy 各向异性" }
+    uniform float _AnisotropyDirectionMain;
+    //: param custom { "default": 1.0, "label": "基础各向异性高光强度系数 IntensityMultiplier", "min": 0.0, "max": 2.0, "group": "6 Anisotropy 各向异性" }
+    uniform float _AnisotropyIntensityMultiplier;
+    //: param custom { "default": 0.0, "label": "第二层各向异性方向 DirectionAdditional", "min": -1.0, "max": 1.0, "group": "6 Anisotropy 各向异性" }
+    uniform float _AnisotropyDirectionAdditional;
+    //: param custom { "default": 0.0, "label": "第二层各向异性位置偏移 OffsetAdditional", "min": -1.0, "max": 1.0, "group": "6 Anisotropy 各向异性" }
+    uniform float _AnisotropyOffsetAdditional;
+    //: param custom { "default": [0.2, 0.2, 0.2, 1.0], "label": "第二层各向异性颜色 ColorAdditional", "widget":"color", "group": "6 Anisotropy 各向异性" }
+    uniform vec4 _AnisotropyColorAdditional;
+  //- endregion
+
   //- region SilkStockings 丝袜 (Standard, keyword _SILK_STOCKINGS)
     // 1.4.4 的 _SilkStockings* 全套。1.3.3 的 _Pantyhose* 在参考里已 0 命中,
     // 整块被这套取代:多了干/湿偏色、覆盖 remap、遮罩贴图(R 各向异性强度 /
@@ -1014,7 +1033,13 @@
       float3 camFwd = GetCamFwd();
 
       // ---- Metallic workflow ----
-      float dielSpec = specScale * 0.04;
+      // _ANISOTROPY_SPECULAR_ON 时介电层 F0 改由各向异性强度系数决定
+      // (参考 _2565/_2566: 0.04 * lerp(1, IntensityMultiplier, mask)),
+      // 而不是平时的 0.04 * specScale —— mask 就是 RMOS.g 本身。
+      float anisoMask = specScale;                                  // _341 = RMOS.g
+      float dielSpec = u_UseAnisotropy
+                     ? 0.04 * mad(anisoMask, _AnisotropyIntensityMultiplier - 1.0, 1.0)
+                     : specScale * 0.04;
       float oneMinusRefl = (1.0 - metallic) * 0.96;
       float3 diffColor = oneMinusRefl * albedo;
       float3 specColor = metallic * (albedo - dielSpec) + dielSpec;
@@ -1130,8 +1155,46 @@
       float denomSq = denom * denom;
       float D_raw = (denomSq != roughSq) ? roughSq / denomSq : 1.0;
 
-      // 各向同性 GGX:可见项只作用在它身上(参考 _3551)。
-      float ggxTerm = clamp(D_raw * 0.5 / (NdotV_spec * 2.0 + roughness + 1e-4) - NEAR_ZERO_Y, 0.0, 20.0);
+      // ---- Anisotropy 各向异性高光 (_ANISOTROPY_SPECULAR_ON) ----
+      // 参考 Sub0_Pass0_Fragment_b375(ON) vs b369(OFF)。两瓣共用一套 TBN,
+      // 方向都乘 mask(=RMOS.g):主瓣的 NDF 顶替各向同性 D 并照常过可见项
+      // (_3100),第二瓣沿视线偏移半角向量、**不过**可见项,单独 clamp 后
+      // 带自己的颜色加进高光(_3120)。
+      float D_forVis = D_raw;
+      float3 anisoAddSpec = float3(0.0);
+      if (u_UseAnisotropy) {
+          // 不勾"使用模型切线"时,切线由法线现场生成 (_505: 法线 XZ 投影的垂线)
+          float3 anisoTanRaw = _AnisotropyUseGeometryTangent
+                             ? tangentWS.xyz
+                             : normalize(float3(-N.z, 0.0, N.x) *
+                                         rsqrt(max(N.z * N.z + N.x * N.x, 6.103515625e-05)));
+          float3 aT = normalize(anisoTanRaw - N * dot(anisoTanRaw, N));
+          float3 aB = cross(N, aT) * tangentWS.w;
+
+          float alphaT1 = roughness * mad(_AnisotropyDirectionMain, anisoMask, 1.0);   // _2599
+          float alphaB1 = roughness * mad(-_AnisotropyDirectionMain, anisoMask, 1.0);  // _2601
+          float alphaTB1 = alphaB1 * alphaT1;                                          // _3041
+          float alphaT2 = roughness * mad(_AnisotropyDirectionAdditional, anisoMask, 1.0);  // _2600
+          float alphaB2 = roughness * mad(-_AnisotropyDirectionAdditional, anisoMask, 1.0); // _2602
+          float alphaTB2 = alphaB2 * alphaT2;                                          // _3042
+
+          float3 v1 = float3(dot(aT, H) * alphaB1, dot(aB, H) * alphaT1, dot(N, H) * alphaTB1);
+          float d1 = dot(v1, v1);
+          float num1 = alphaTB1 * (alphaTB1 * alphaTB1);
+          float den1 = d1 * d1;
+          D_forVis = (den1 != num1) ? (num1 / den1) : 1.0;                             // 顶替 _3056/_3080
+
+          float3 H2 = normalize(H + V * _AnisotropyOffsetAdditional);                  // _3071
+          float3 v2 = float3(dot(aT, H2) * alphaB2, dot(aB, H2) * alphaT2, dot(N, H2) * alphaTB2);
+          float d2 = dot(v2, v2);
+          float num2 = alphaTB2 * (alphaTB2 * alphaTB2);
+          float den2 = d2 * d2;
+          float ndf2 = (den2 != num2) ? clamp(num2 / den2, 0.0, 20.0) : 1.0;           // _3120
+          anisoAddSpec = ndf2 * anisoMask * _AnisotropyColorAdditional.rgb;
+      }
+
+      // 各向同性(或各向异性主瓣)GGX:可见项只作用在它身上(参考 _3551 / _3100)。
+      float ggxTerm = clamp(D_forVis * 0.5 / (NdotV_spec * 2.0 + roughness + 1e-4) - NEAR_ZERO_Y, 0.0, 20.0);
 
       // ---- SilkStockings 各向异性高光 (_3025.._3557) ----
       // alphaT/alphaB 由 alpha(=roughness²) 按方向劈开,劈的幅度再乘透肉衰减;
@@ -1194,12 +1257,15 @@
       }
 
       // Main lit composition
+      // 各向异性第二瓣与主瓣共用 specColor:参考 _3143 =
+      //   specAmb * F0 * (NDF1_vis + NDF2 * mask * ColorAdditional)
+      float3 specLobes = ggxTerm + anisoAddSpec;
       float3 mainLit;
       if (u_ClearCoat) {
           mainLit = fullDiff * nprDiff * alphaPremul * ccDiffScale
-                  + (specAmbInt * fullDiff) * (ggxTerm * specRampColor * ccBaseScale * ccBaseScale + ccSpecDir) * _CharacterParams13.w;
+                  + (specAmbInt * fullDiff) * (specLobes * specRampColor * ccBaseScale * ccBaseScale + ccSpecDir) * _CharacterParams13.w;
       } else {
-          mainLit = fullDiff * nprDiff * alphaPremul + (specAmbInt * fullDiff) * (ggxTerm * specRampColor) * _CharacterParams13.w;
+          mainLit = fullDiff * nprDiff * alphaPremul + (specAmbInt * fullDiff) * (specLobes * specRampColor) * _CharacterParams13.w;
       }
       float mainLitLum = dot(mainLit, LUM);
       float desatAmt = clamp(mainLitLum - 0.5, 0.0, 0.5);

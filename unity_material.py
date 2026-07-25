@@ -132,6 +132,11 @@ FLOAT_DEFAULTS = {
     "_MatcapNormalScale": 1.0, "_ParallaxScale": 0.3,
     "_ParallaxMarchNum": 2.0,
     "_SpecBumpScale": 1.0,
+    # characternpr (Standard) 的 _ANISOTROPY_SPECULAR_ON 一套 —— 与下面 hair
+    # 的 _AnisotropyValue/_AnisotropyDirX 是两个不同 shader 的不同功能。
+    "_AnisotropyDirectionMain": 0.0,
+    "_AnisotropyIntensityMultiplier": 1.0, "_AnisotropyDirectionAdditional": 0.0,
+    "_AnisotropyOffsetAdditional": 0.0,
     "_AnisotropyValue": 0.7, "_AnisotropyValue2": 0.712, "_AnisotropyDirX": 0.0,
     "_AnisotropyIntensity": 2.0, "_AnisotropyEdgeFade": 3.0, "_AnisotropyRange2": 0.5,
     "_StrokeScale": 1.0, "_UseLineMap": 1.0, "_LineAmount": 300.0,
@@ -185,6 +190,8 @@ FLOAT_IDENTITY = [
     "_SkinRimOffScale", "_FaceRimOffScale", "_EmotionBlend",
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
+    "_AnisotropyDirectionMain", "_AnisotropyIntensityMultiplier",
+    "_AnisotropyDirectionAdditional", "_AnisotropyOffsetAdditional",
     "_AnisotropyValue", "_AnisotropyValue2", "_AnisotropyDirX", "_AnisotropyIntensity",
     "_AnisotropyEdgeFade", "_AnisotropyRange2", "_StrokeScale",
     "_UseLineMap", "_LineAmount", "_LineValue", "_LineRange", "_LineIntensity",
@@ -222,7 +229,7 @@ FLOAT_IDENTITY = [
 COLOR_IDENTITY = [
     "_BaseColor", "_EmissionColor", "_SDFRimColor", "_HighlightMapVector",
     "_MatcapColor", "_EyeHighLightColor", "_EyeScatteringColor",
-    "_AnisotropyColor2", "_HairDarkenParams",
+    "_AnisotropyColor2", "_AnisotropyColorAdditional", "_HairDarkenParams",
     "_SilkStockingsDryColor", "_SilkStockingsWetColor", "_SilkStockingsColor",
     "_ClearCoatColor", "_ParallaxColor",
     "_VFXColor", "_VFXBlendTint", "_VFXSpecialParam", "_VFXFresnelColor",
@@ -254,7 +261,15 @@ COLOR_IDENTITY = [
 # Color-typed property with a name ending in "Color". Anything else here --
 # _HighlightMapVector, the UV speeds, every _CharacterParamsN, the exposure
 # blocks -- is a Vector and must stay raw. Alpha is never gamma-corrected.
-_SRGB_COLOR_PROPS = tuple(p for p in COLOR_IDENTITY if p.endswith("Color"))
+# ...with one explicit exception list for the Color-typed properties whose name
+# does NOT end in "Color". Read off the reference Properties block, not guessed:
+# 1.4.4's characternpr declares
+#     _AnisotropyColorAdditional ("'第二层各向异性颜色' {}", Color) = (0.2, 0.2, 0.2, 1)
+# so the name heuristic alone would have shipped it un-gamma-corrected.
+_SRGB_COLOR_EXTRA = ("_AnisotropyColorAdditional",)
+
+_SRGB_COLOR_PROPS = tuple(p for p in COLOR_IDENTITY
+                          if p.endswith("Color") or p in _SRGB_COLOR_EXTRA)
 
 
 def _srgb_to_linear(c):
@@ -282,6 +297,8 @@ BOOL_MAP = {
     "u_UseShadowLut":        "_UseShadowLutTex",
     "u_UseEmission":         "_UseEmission",
     "u_ClearCoat":           "_ClearCoat",
+    "u_UseAnisotropy":       "_UseAnisotropy",
+    "_AnisotropyUseGeometryTangent": "_AnisotropyUseGeometryTangent",
     "u_SilkStockings":       "_SilkStockings",
     "_SilkStockingsAdvance": "_SilkStockingsAdvance",
     "u_UseParallax":         "_UseParallax",
@@ -324,6 +341,7 @@ KEYWORD_MAP = {
     "_SHADOW_LUT_TEX":        "u_UseShadowLut",
     "_EMISSION":              "u_UseEmission",
     "_CLEARCOAT":             "u_ClearCoat",
+    "_ANISOTROPY_SPECULAR_ON": "u_UseAnisotropy",
     "_SILK_STOCKINGS":        "u_SilkStockings",
     "_PARALLAX_MAP":          "u_UseParallax",
     "_SDFLIGHTMAP":           "u_UseSDFLightmap",
