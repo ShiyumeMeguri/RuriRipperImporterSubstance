@@ -94,11 +94,11 @@
     uniform float _BumpScale;
     //: param custom { "default": true, "label": "使用 RMOS 通道 _METALLICSPECGLOSSMAP", "group": "1 基础设置" }
     uniform bool u_UseMetallicGlossMap;
-    //: param custom { "default": 0.839, "label": "金属度(无贴图时) Metallic", "min": 0.0, "max": 1.0, "group": "1 基础设置" }
+    //: param custom { "default": 0.0, "label": "金属度(无贴图时) Metallic", "min": 0.0, "max": 1.0, "group": "1 基础设置" }
     uniform float _Metallic;
     //: param custom { "default": 1.0, "label": "高光强度(无贴图时) Specular", "min": 0.0, "max": 1.0, "group": "1 基础设置" }
     uniform float _Specular;
-    //: param custom { "default": 0.406, "label": "光滑度(无贴图时) Smoothness", "min": 0.0, "max": 1.0, "group": "1 基础设置" }
+    //: param custom { "default": 0.5, "label": "光滑度(无贴图时) Smoothness", "min": 0.0, "max": 1.0, "group": "1 基础设置" }
     uniform float _Smoothness;
     //: param custom { "default": true, "label": "使用漫反射 Ramp _DIFF_RAMP_ON", "group": "1 基础设置" }
     uniform bool u_UseDiffRamp;
@@ -581,6 +581,12 @@
     // 它只通过 max/smoothstep 合流,故同源。
     //: param custom { "default": 0.0, "label": "[H14] 湿润度 Wetness", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
     uniform float f_SilkWetness;
+    // [H14] 湿身变光滑那一条链(参考 _2450/_2506/_2670)还要一张**引擎的 3D 雨痕体积图**
+    //       (逐帧按 1/3 切片采三次)。Painter 没有,拿它的 .z 当滑条:0 = 没下雨、
+    //       没有雨痕(引擎不下雨时的状态),1 = 整片湿透。参考的 "white" 默认是给
+    //       材质贴图槽用的,这里是引擎全局,所以默认取干。
+    //: param custom { "default": 0.0, "label": "[H14] 雨痕量(引擎 3D 雨痕图)", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+    uniform float f_SilkWetStreak;
   //- endregion
 
   //- region Parallax (Standard)
@@ -1374,6 +1380,7 @@
                                     - _SilkStockingsColor.a, 0.0, 1.0);
           }
           silk_tint = lerp(_SilkStockingsDryColor.rgb, _SilkStockingsWetColor.rgb, wet);
+
       }
 
       // ---- EnemyHitFlash 受击闪白 (_ENEMY_HIT_FLASH) ----
@@ -1642,6 +1649,17 @@
           float3 albedo0 = albedo;              // _348.._350 未经丝袜处理的原反照率
           float3 shadowColor0 = shadowColor;    // _370.._372 同上,阴影侧那一份
           float silk_NdotV = clamp(dot(N, V), 0.0, 1.0);                       // _1290
+
+          // ---- 湿身变光滑(参考 _2348/_2439/_2446/_2450/_2506/_2670)----
+          // 丝袜关掉时这条链是"雨一来就 min(rough, 0.05)"的硬切;开了丝袜之后
+          // 改成按权重插值,权重 = NdotV × max(雨痕羽化, 雨痕过阈值)。
+          //   _2348 wetRamp = min(2*wet, 1)
+          //   _2439 t       = min((coverage - 1) * -5, 1)
+          //   _2446 edge    = saturate((smoothstep(t) + streak - 1) * 10)
+          //   _2450         = wetRamp * smoothstep(edge)
+          //   _2506 w       = NdotV * max(_2450, streak >= 1.01 - wet*(1 - 0.5*coverage))
+          //   _2670 rough   = lerp(rough, min(rough, 0.05), w)
+          // 必须放在 roughness = roughnessRaw² 之前,且此处 N 才成立。
           float silk_affect = mad(min(exp2(log2(1.05 - silk_NdotV) * (silk_coverage + silk_coverage)), 1.0),
                                   _SilkStockingsMaxAffect - _SilkStockingsMinAffect,
                                   _SilkStockingsMinAffect);                    // _1305
@@ -1655,6 +1673,15 @@
           // 三处同源代入 f_SilkWetness,阈值与斜率保持参考原值不动。
           float wet = (_DisableRainEffectOnMaterial > 0.99) ? 0.0
                     : clamp(f_SilkWetness, 0.0, 1.0);
+          float silkWetRamp = min(wet + wet, 1.0);                                  // _2348
+          float silkT = min((silk_coverage - 1.0) * (-5.0), 1.0);                   // _2439
+          float silkTS = (silkT * silkT) * mad(silkT, -2.0, 3.0);
+          float silkEdge = clamp(mad(silkTS, 1.0, f_SilkWetStreak - 1.0) * 9.999998, 0.0, 1.0);   // _2446
+          float silkWetMask = silkWetRamp * ((silkEdge * silkEdge) * mad(silkEdge, -2.0, 3.0));   // _2450
+          float silkOver = (f_SilkWetStreak
+                            >= mad(-mad(-silk_coverage, 0.5, 1.0), wet, 1.0099999)) ? 1.0 : 0.0;
+          float silkGloss = silk_NdotV * max(silkWetMask, silkOver);                // _2506
+          roughnessRaw = mad(silkGloss, min(roughnessRaw, 0.05) - roughnessRaw, roughnessRaw);    // _2670
           float t1 = clamp(((wet - 0.8) + clamp(wet * _SilkStockingsRainWetMaskScale, 0.0, 1.0)) * 3.3333333, 0.0, 1.0);  // _2517
           float t2 = clamp(((wet - 0.45) + min(wet, 1.0)) * 1.5384614, 0.0, 1.0);                                        // _2526
           float wetSmooth = max((t2 * t2) * mad(t2, -2.0, 3.0), (t1 * t1) * mad(t1, -2.0, 3.0));

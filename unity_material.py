@@ -244,14 +244,28 @@ FLOAT_DEFAULTS = {
 }
 
 # Part-specialised PBR scalars (the HGRP variants each declare their own).
+# Fallbacks for when the .mat does not carry the scalar at all. These are the
+# reference Properties defaults, read off each part's own .shader -- NOT tuned
+# values. A wrong _Metallic fallback is not a small error: metallic drives both
+# specColor = lerp(0.04, albedo, m) and diffColor = (1-m)*0.96*albedo, so a
+# large default crushes the diffuse and blows up the specular, which reads as a
+# glazed/ceramic surface.
+#   characternpr / _skin / _hair / _liquidag: _Metallic 0, _Specular 1, _Smoothness 0.5
+#   characternpr_eye:                         _Metallic 0, _Specular 0, _Smoothness 0.5
 PART_PBR_DEFAULTS = {
-    0: {"_Metallic": 0.839, "_Specular": 1.0, "_Smoothness": 0.406},
-    1: {"_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 0.5},
-    2: {"_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 0.5},
-    3: {"_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 1.0},
-    4: {"_Metallic": 0.0, "_Specular": 0.0, "_Smoothness": 0.1},
-    5: {"_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 0.5},
+    0: {"_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 0.5},   # characternpr
+    1: {"_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 0.5},   # characternpr_skin
+    2: {"_Metallic": 0.0, "_Specular": 0.0, "_Smoothness": 0.5},   # characternpr_eye
+    3: {"_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 0.5},   # characternpr_hair
+    4: {"_Metallic": 0.0, "_Specular": 1.0, "_Smoothness": 0.5},   # characternpr (Fur)
+    5: {"_Metallic": 0.0, "_Specular": 0.0, "_Smoothness": 0.5},   # characternpr_eye
 }
+
+# Floats the reference declares with [Gamma]. Unity converts these through
+# GammaToLinearSpace on upload in a linear-colour-space project, exactly as it
+# does for [Gamma] colours -- passing the raw .mat number instead makes the
+# value far too high (0.5 -> 0.214 is a 2.3x error on metallic).
+GAMMA_FLOAT_PROPS = ("_Metallic",)
 
 FLOAT_IDENTITY = [
     "_BumpScale", "_Metallic", "_Specular", "_Smoothness",
@@ -753,7 +767,10 @@ def build_plan(name, guid, document, texture_exists, face_basis=None):
         default = PART_PBR_DEFAULTS.get(part, {}).get(prop)
         if default is None:
             default = FLOAT_DEFAULTS.get(prop, 0.0)
-        return float(floats.get(prop, default))
+        value = float(floats.get(prop, default))
+        if prop in GAMMA_FLOAT_PROPS:
+            value = _srgb_to_linear(value)
+        return value
 
     uniforms = {"u_CharaPart": part}
 
