@@ -54,8 +54,23 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 - [x] Emission 呼吸(遮罩 = `_EmissionMap.a` → user2 通道)
 - [x] `_ExtraAlphaMask` 的 Root/Depth 两段染色
 - [x] `_CHARACTER_EROSION` 侵蚀全套(三段色 + pattern + metallic/粗糙度 + RNM 法线)
-- [x] `DITHER_SPHERE` —— 查证为**空功能**:两个属性在全部 3184 份产物里只以
-      cbuffer 声明出现,任何 fragment/vertex 都没读过,记进 IGNORED_KEYWORDS
+- [x] `_PUPPET` + `_PUPPET_PROCEDURAL_DCURVE`(区域遮罩 + pattern 上色 / 7 段 cos 域扭曲脊线)
+- [x] `_REALISTIC_LIGHTING`(去掉两处风格化环境亮度重映射)
+- [x] `VFX_CHARACTER_DISSOLVE`(噪声/切面双路 + discard + 边缘自发光)
+- [x] `_ViewFade`、`_AlphaClipThreshold`(裁切阈值改由材质属性驱动)、`_ParallaxUseNormal`
+- [x] skin `FaceDecal` 全套 13 属性;hair 两段发色染色;eye 虹膜染色
+- [x] VFX 的 `_VFXMainUVSet` / `_VFXScreenUVUseDepth` / `_VFXFresnelUseNormalMap`
+
+**查证为空功能 / 无消费者(有证据,不是省事)**:
+- `DITHER_SPHERE`:两个属性在全部 3184 份产物里只以 cbuffer 声明出现,没有任何
+  fragment/vertex 读过。
+- `_ResponsiveTransparency`:同上,0 处非声明引用。
+- `_FurColorEnable` / `_FurColor`:1.4.4 里是死属性,零个编译产物引用。
+- `_HairBrowMaskThreshold`:只在 Pass1 CharacterOutline / Pass2 DepthOnlyOutline /
+  Pass3 PreGBuffer 里读,Pass0 ForwardLit(Painter 唯一渲染的 pass)从不读。
+- `_FurGravityStrength`:只在 vertex 阶段(壳层挤出),[H10] 已说明。
+- `_ALPHA_SCENE_DEPTH_FADE`(liquidag):读 `_CameraDepthTexture`,Painter 没有场景
+  深度 —— 与 [H11] 同一堵墙。
 
 顺带修掉的既有隐患:
 - `_SRGB_COLOR_PROPS` 只按"名字以 Color 结尾"判断 Color 类型,而
@@ -63,6 +78,21 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 - 三个新贴图参数误写成 `//: param auto { ... }`,Painter 直接拒绝创建 shader。
   已修,并加了 `tools/check_shader_params.py` 静态校验(`param auto` 不能带
   JSON、`sampler2D` 必须有 `usage:texture`),复现即报错。
+
+## 收官统计
+
+再跑一次 `tools/shader_gap.py`(判定口径没变):
+
+| 变体 | GAP 起 → 现 | 未处理 keyword 起 → 现 |
+|---|---|---|
+| characternpr | 123 → **34** | 10 → **0** |
+| characternpr_skin | 48 → **15** | 2 → **0** |
+| characternpr_hair | 20 → **16** | 2 → **0** |
+| characternpr_eye | 9 → **7** | 2 → **0** |
+| characternpr_liquidag | 25 → **15** | 4 → **1** |
+
+剩下的 GAP 全部落在早就写明的三类:VAT 顶点动画、描边 pass、模板/深度序与引擎态。
+不是"没做完",是这三类在 Painter 的片元着色里没有对应物。
 
 ## 要实现的清单（片元级,按影响排序）
 

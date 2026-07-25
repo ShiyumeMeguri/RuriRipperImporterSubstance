@@ -493,6 +493,9 @@ IGNORED_KEYWORDS = {
     "DITHER_SPHERE": ("_DitherSphereRadius/_DitherSphereSmoothness appear ONLY as cbuffer "
                       "declarations across all 3184 reference dumps -- never read by any "
                       "fragment (nor any vertex) shader, so there is nothing to port"),
+    "_ALPHA_SCENE_DEPTH_FADE": "reads _CameraDepthTexture (scene depth); Painter has no "
+                               "scene depth at all -- the same wall [H11] already "
+                               "documents for hair's depth-edge mask",
     "_CHARACTER_FUR": "the Fur path is selected by CharaPart == 4 (infer_chara_part), "
                       "so the keyword adds nothing on top",
     "TEXTURE_STREAMING_FEEDBACK_WAVE_OPS": "texture-streaming feedback pass only",
