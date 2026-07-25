@@ -373,6 +373,19 @@
     uniform vec4 _ExtraRootTintColor;
     //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "Depth Tint Color", "widget":"color", "group": "A ExtraAlphaMask 额外遮罩" }
     uniform vec4 _ExtraDepthTintColor;
+
+    // ---- liquidag 液体附着(_OutlineColorMap 在这份变体里不是描边贴图) ----
+    // 参考 characternpr_liquidag b13 _970.._1026:按 UV*tiling 采 _OutlineColorMap,
+    // RG 当细节法线、B 当高度,和液面轴坐标一起决定附着边界,再 TBN 变换覆盖法线。
+    // 触发量 _434 是引擎按实例塞进 _CharacterParams10 的附着进度字节
+    // (0..255,门限 >2.55),tiling 走 _CharacterParams10.z —— 材质里都没有对应
+    // 属性 → [H19] 两根滑条代替,进度默认 0 就是参考里"没附着"的状态。
+    //: param custom { "default": "", "default_color": [0.5,0.5,1.0,0.0], "label": "液体附着法线 RG + 高度 B(liquidag)", "usage": "texture", "group": "A 液体附着 liquidag" }
+    uniform sampler2D _OutlineColorMap;
+    //: param custom { "default": 0.0, "label": "[H19] 附着进度(引擎逐实例字节)", "min": 0.0, "max": 255.0, "group": "A 液体附着 liquidag" }
+    uniform float f_LiquidProgress;
+    //: param custom { "default": 1.0, "label": "[H19] 附着平铺(引擎 CharacterParams10.z)", "min": 0.01, "max": 32.0, "group": "A 液体附着 liquidag" }
+    uniform float f_LiquidTiling;
   //- endregion
 
   //- region CustomizeAvatar 换装染色 (Standard, keyword _CUSTOMIZE_AVATAR)
@@ -1503,6 +1516,30 @@
                                     d * n1.y / n1.z + eNy,
                                     d - eNz);                               // _670,_671,_672
           N = TangentToWorld(blendedTS, normalWS_raw, tangentWS, faceSign);
+      }
+
+      // ---- liquidag 液体附着法线(参考 characternpr_liquidag b13 _970.._1026)----
+      // 门限、系数、smoothstep、z 重建、背面清零全部照抄,只有两个引擎量换成
+      // [H19] 滑条;液面轴参考里是 TEXCOORD_5.y(顶点管线送来的位置分量),
+      // 这里取世界空间 Y。进度 0 时门限恒不成立 = 参考的"未附着"。
+      if (f_LiquidProgress > 2.55) {
+          float2 lqUV = GetBaseUV(inputs) * f_LiquidTiling;                    // _971,_972
+          float4 lqT = texture(_OutlineColorMap, lqUV);                        // _976
+          float lqW = clamp(((mad(positionWS.y, 0.65, lqT.z) + 0.35)
+                             - mad(-f_LiquidProgress, 0.00392156886, 2.0))
+                            * 2.85714364, 0.0, 1.0);                           // _998
+          float lqS = (lqW * lqW) * mad(lqW, -2.0, 3.0);                       // _1001
+          float lqNx = mad(lqT.x, 2.0, -1.0);                                  // _1002
+          float lqNy = mad(lqT.y, 2.0, -1.0);                                  // _1003
+          float2 lqN2 = float2(lqNx, lqNy);
+          bool lqFront = (uniform_facing >= 0);
+          float lqZ = lqFront ? mad(max(sqrt(1.0 - min(dot(lqN2, lqN2), 1.0)), 1e-16) - 1.0,
+                                    lqS, 1.0)
+                              : 1.0;                                           // _1019
+          float3 lqTS = normalize(float3(lqFront ? (lqNx + lqNx) * lqS : 0.0,
+                                         lqFront ? (lqNy + lqNy) * lqS : 0.0,
+                                         lqZ));                                // _1023.._1026
+          N = TangentToWorld(lqTS, normalWS_raw, tangentWS, faceSign);
       }
 
       // ---- ClearCoat setup (mask = user1.r; 通道未填充时回退 HGRP 默认 "white"=1) ----

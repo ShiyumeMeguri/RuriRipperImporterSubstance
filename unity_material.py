@@ -108,6 +108,9 @@ TEXTURE_PARAMS = {
     "_StylizedFresnelNoiseMap": ("_StylizedFresnelNoiseMap", OP_COPY_RGBA),
     # UV1 的 Alpha(R)/Root(G)/Depth(B)/ID(A) —— 四通道全是数据。
     "_ExtraAlphaMask":     ("_ExtraAlphaMask",     OP_COPY_RGBA),
+    # liquidag 拿 _OutlineColorMap 当液体附着的细节法线(RG)+ 高度(B),
+    # 不是描边贴图 —— 见 shader 里 "液体附着 liquidag" 一段。
+    "_OutlineColorMap":    ("_OutlineColorMap",    OP_COPY_RGBA),
     "_ErosionNormalSmoothnessMap": ("_ErosionNormalSmoothnessMap", OP_COPY_RGBA),
     "_ErosionPatternMap":  ("_ErosionPatternMap",  OP_COPY_RGBA),
     "_PuppetPatternMap":   ("_PuppetPatternMap",   OP_COPY_RGBA),
