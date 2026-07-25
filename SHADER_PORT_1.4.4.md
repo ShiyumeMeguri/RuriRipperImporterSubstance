@@ -61,16 +61,15 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 - [x] skin `FaceDecal` 全套 13 属性;hair 两段发色染色;eye 虹膜染色
 - [x] VFX 的 `_VFXMainUVSet` / `_VFXScreenUVUseDepth` / `_VFXFresnelUseNormalMap`
 
-**查证为空功能 / 无消费者(有证据,不是省事)**:
-- `DITHER_SPHERE`:两个属性在全部 3184 份产物里只以 cbuffer 声明出现,没有任何
-  fragment/vertex 读过。
-- `_ResponsiveTransparency`:同上,0 处非声明引用。
-- `_FurColorEnable` / `_FurColor`:1.4.4 里是死属性,零个编译产物引用。
-- `_HairBrowMaskThreshold`:只在 Pass1 CharacterOutline / Pass2 DepthOnlyOutline /
-  Pass3 PreGBuffer 里读,Pass0 ForwardLit(Painter 唯一渲染的 pass)从不读。
-- `_FurGravityStrength`:只在 vertex 阶段(壳层挤出),[H10] 已说明。
-- `_ALPHA_SCENE_DEPTH_FADE`(liquidag):读 `_CameraDepthTexture`,Painter 没有场景
-  深度 —— 与 [H11] 同一堵墙。
+- [x] `DITHER_SPHERE` 球形 dither 剔除、`_DisableRainEffectOnMaterial` 关雨
+- [x] `_Cull`(参考是 pass 渲染状态,片元按朝向 discard 得到同样的可见结果)
+- [x] liquidag:`_ALPHA_SCENE_DEPTH_FADE`([H11] 距离滑条代替场景深度)、
+      `_OutlineColorMap` 液体附着细节法线([H19] 两根滑条代替引擎逐实例量)
+
+**两条早先的"空功能"判断是错的,已收回并补做:**
+`DITHER_SPHERE` 和 `_DisableRainEffectOnMaterial` 我按抽样到的单个文件下的结论,
+实际 `where_used.py` 一扫:前者在 Pass0 fragment 里有真实实现,后者 954 处。
+**教训**:抽样不能当全域证据 —— 所以才有了下面这张全量表。
 
 顺带修掉的既有隐患:
 - `_SRGB_COLOR_PROPS` 只按"名字以 Color 结尾"判断 Color 类型,而
@@ -78,6 +77,15 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 - 三个新贴图参数误写成 `//: param auto { ... }`,Painter 直接拒绝创建 shader。
   已修,并加了 `tools/check_shader_params.py` 静态校验(`param auto` 不能带
   JSON、`sampler2D` 必须有 `usage:texture`),复现即报错。
+- **移植过程中我自己引入的回归:眼睛被打穿**。把裁切阈值从旧的 `f_AlphaClip`
+  (alpha-test 关闭时写 0,等于不裁)换成真属性 `_AlphaClipThreshold`(默认 0.5)
+  时,把**门控**一起丢了 —— 于是所有部位无条件按 `_BaseMap.a` 裁切。
+  而 `characternpr_eye` 的 `_BaseMap.a` 是虹膜散射遮罩(见 `_EyeScatteringColor`),
+  根本不是不透明度,眼球被整片打穿露出后面的皮肤。
+  证据:Pass0 里 `_AlphaClipThreshold` 的真实引用只出现在带 `_ALPHATEST_ON` 的
+  变体(characternpr 51 处、`_hair` 15 处),而 `_skin` / `_eye` / `_liquidag`
+  **零引用**,eye 的 `SV_Target.w` 参考里压根没写过。
+  已按此恢复 `u_AlphaClip` 门控,并让 Face/Eyes/Eyebrow 永不走默认裁切。
 
 ## 收官统计
 
@@ -85,14 +93,56 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 
 | 变体 | GAP 起 → 现 | 未处理 keyword 起 → 现 |
 |---|---|---|
-| characternpr | 123 → **34** | 10 → **0** |
-| characternpr_skin | 48 → **15** | 2 → **0** |
-| characternpr_hair | 20 → **16** | 2 → **0** |
-| characternpr_eye | 9 → **7** | 2 → **0** |
-| characternpr_liquidag | 25 → **15** | 4 → **1** |
+| characternpr | 123 → **30** | 10 → **0** |
+| characternpr_hair | 20 → **14** | 2 → **0** |
+| characternpr_skin | 48 → **13** | 2 → **0** |
+| characternpr_liquidag | 25 → **11** | 4 → **0** |
+| characternpr_shadowreceiver | 7 → **7** | 0 → **0** |
+| characternpr_eye | 9 → **6** | 2 → **0** |
+| characternpr_proxylod | 10 → **5** | 1 → **0** |
+| characternpr_overlayshadow | 10 → **3** | 0 → **0** |
 
-剩下的 GAP 全部落在早就写明的三类:VAT 顶点动画、描边 pass、模板/深度序与引擎态。
-不是"没做完",是这三类在 Painter 的片元着色里没有对应物。
+## 剩余 GAP 的逐条证据(`tools/where_used.py` 全量扫描)
+
+不再用"我认为它没用"这种说法。下表是把 3184 份产物逐份扫过之后,每个剩余属性
+**真实被哪个 stage、哪个 pass 读**(排除 cbuffer 声明行)。Painter 的着色只有
+单个 Pass0 **fragment** 程序 —— 没有 vertex 钩子、没有第二个 pass。所以只要一条
+属性落在 "Vertex" 或 "Pass1+",它就不是被跳过,而是**够不着**。
+
+**A. 全语料 0 次读取 —— 1.4.4 里的死属性(21 条)**
+`_VertexAnimation*`(全 10 条)、`_EnableOutline`、`_EnableOutlineMask`、
+`_OutlineTransparent`、`_OutlineInnerClipStencilMask`、`_PreZStencilRefOption`、
+`_EnablePreDepthPass`、`_TransparentDepthWrite`、`_IsChildMaterial`、
+`_ResponsiveTransparency`、`_FurColor` / `_FurColorEnable`、`_TintSplit`、
+`_FresnelRootFade`、`_ShadowOverIris`、`_DisableDrawUnderHair`。
+连参考自己都不读 —— 移植它们等于凭空发明行为。
+
+**B. 只在 Vertex 阶段(Painter 无顶点钩子)**
+| 属性 | 证据 |
+|---|---|
+| `_VATFrameIndex` / `_DebugVATFrameIndex` | Vertex Pass0×181 …… Pass6×6,**fragment 0** |
+| `_OutlineWidth` / `_OutlineOffsetZ` / `_OutlineAverageNormal` | Vertex Pass1×282、Pass2×78 |
+| `_FurGravityStrength` | Vertex Pass0×48([H10] 已有单壳层预览) |
+
+**C. 只在 Pass1(CharacterOutline)fragment**
+`_OutlineTintColor`(×858)、`_OutlineTintEnable` / `_OutlineColorBrightness` /
+`_OutlineColorSaturation`(各 ×282)。Painter 没有描边 pass。
+
+**D. `_AnimationTexture` 的 "Fragment Pass0×393" 是反编译器的贴图名错位**
+该槽位(t21)周围是一整套 **cube 面选择 + cookie 图集 UV** 计算,`_LightCookie`
+就声明在 t19 —— 它实际是光照 cookie 的 2D 图集,不是 VAT。真正的 VAT 驱动
+`_VATFrameIndex` 是纯 vertex(见 B)。这正是本战役反复吃过的那个坑:
+**贴图按用途认,只信 cbuffer 里的标量名**。
+
+**E. `characternpr_shadowreceiver` 的 7 条全部是 Pass0 fragment,但对象不同**
+`_ShadowColor`(×8)、`_CircleFade` / `_CircleFadeDistance` / `_CircleFadeSmoothness`、
+`_CapsuleAoColor`、`_DisableCharacterSelfShadow`、`_DisableSceneShadow`。
+这是**角色脚下那块接影地面片**的材质:它不贴在角色网格上,没有 BaseMap/法线/
+PBR 通道,画的是投影本身。Painter 是给角色网格刷贴图的,这份材质在这里没有
+可绘制的通道 —— 不是够不着,是**不属于这个 uber shader 的对象**。
+`characternpr_proxylod` 同理(远景替身,只有一套简化色)。
+
+除 E 之外,剩余 GAP 全部落进 A/B/C/D 四类,均有逐条计数为证。
 
 ## 要实现的清单（片元级,按影响排序）
 
@@ -131,15 +181,12 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 `_ALPHA_SCENE_DEPTH_FADE` + `_DepthFadeValue/_DepthFadeExp`、`_ENEMY_HIT_FLASH`、
 `_OutlineColorMap`。液体/黏液角色材质。
 
-### 明确不做（记录理由,保持清单诚实）
+### 明确不做（理由见上面"剩余 GAP 的逐条证据",不再是断言）
 
-- **顶点级**:`_AnimationTexture` / `_VATFrameIndex` / `_DebugVATFrameIndex`(VAT 顶点动画)、
-  `_VertexAnimation*` 全套、Fur 壳层挤出(已有 [H10] 单壳层预览)。
-- **独立 pass**:`_EnableOutline` 全套描边参数(Painter 无描边 pass)、
-  `_PreZStencilRefOption` / `_EnablePreDepthPass` / `_TransparentDepthWrite`(模板/深度序)。
-- **引擎态**:`_IsChildMaterial`、`_DisableRainEffectOnMaterial`、
-  `TEXTURE_STREAMING_FEEDBACK_WAVE_OPS`、`HG_ENABLE_MV`、`SRP_INSTANCING_ON`。
-- **characternpr_shadowreceiver**:地面接影片,不是角色表面材质,与贴图绘制无关。
+- **A/B/C/D 四类**:死属性、顶点级、Pass1 描边、反编译器名字错位。
+- **E**:`characternpr_shadowreceiver` / `characternpr_proxylod`,不是角色表面材质。
+- `TEXTURE_STREAMING_FEEDBACK_WAVE_OPS` / `HG_ENABLE_MV` / `SRP_INSTANCING_ON`:
+  引擎批处理与 streaming 反馈,与着色结果无关。
 - **SDF / PBR**:按要求保留现有的**故意偏离**,不对齐。
 
 ## 移植方法（每个功能都走同一条路,不猜）
