@@ -46,7 +46,11 @@
        混合等价逼近：输出阴影染色 _BaseColor.rgb + alpha=变暗权重(texR·a²)，强制半透明
        (forceAlphaBlend, 否则该材质 _SurfaceType 非透明会被渲成挡眼的白色不透明面片)。
        眼白 fb≈1 时 over 与真乘法逐像素相等。顶点视空间偏移 _ShadowAngleRange 跳过。
-  [H14] 丝袜湿身的湿润度来自天气/雨系统(参考 max(角色浸润, 雨量/255)) → f_SilkWetness。
+  [H14] 丝袜湿身的湿润度参考里是 max(角色浸润, 雨量/255),来自自定义管线的天气系统。
+        Painter 只有片元程序,拿不到那个逐帧状态 → 改成面板上的手动滑条
+        f_SilkWetness / f_SilkWetStreak,**默认 0 = 干态**,想看湿身效果就手动
+        往上拉,等价于模拟管线给的下雨程度。湿身链本身(色偏/高光强度/变光滑/
+        透肉或压暗)全部按参考原样保留,只是驱动源换成滑条。
   [H15] 受击闪白的 Fresnel 项乘引擎全局曝光 _ExposureWithMiscParams.y → f_HitFlashExposure。
   [H16] 溶解取 max(_DissolveScheduleOffset, 引擎逐物体进度) → 只留材质那一半 + 滑条。
   [H17] VFX 屏幕 UV 需要 _ScreenParams → f_ScreenSize(默认 1920×1080)。
@@ -560,7 +564,9 @@
     uniform float _SilkStockingsMaxAffect;
     //: param custom { "default": 5.0, "label": "高光强度Remap SpecularInt", "min": 0.0, "max": 20.0, "group": "7 SilkStockings 丝袜" }
     uniform float _SilkStockingsSpecularInt;
-    //: param custom { "default": 0.0, "label": "高光干燥态最小值 SpecularMinAtMinWetness", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+        // _949 = lerp(本值, 1, 湿润度) × SpecularInt。湿润度 0 时它**就是**丝袜
+    // 各向异性高光的总强度;参考默认 0 = 干态无丝袜高光,要看效果得调它或调湿润度。
+//: param custom { "default": 0.0, "label": "干态高光强度 SpecularMinAtMinWetness", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
     uniform float _SilkStockingsSpecularMinAtMinWetness;
     //: param custom { "default": 0.8, "label": "高光透肉衰减 SpecularFalloff", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
     uniform float _SilkStockingsSpecularFalloff;
@@ -579,13 +585,13 @@
     // [H14] 湿润度:游戏里来自天气/雨系统(_563 = max(角色浸润, 雨量/255)),
     // Painter 没有 → 一根滑条替代。参考里驱动"湿身遮罩"的光照项 (_1589) 与
     // 它只通过 max/smoothstep 合流,故同源。
-    //: param custom { "default": 0.0, "label": "[H14] 湿润度 Wetness", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+    //: param custom { "default": 0.0, "label": "[H14] 湿润度 Wetness(0=干,手动模拟下雨)", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
     uniform float f_SilkWetness;
     // [H14] 湿身变光滑那一条链(参考 _2450/_2506/_2670)还要一张**引擎的 3D 雨痕体积图**
     //       (逐帧按 1/3 切片采三次)。Painter 没有,拿它的 .z 当滑条:0 = 没下雨、
     //       没有雨痕(引擎不下雨时的状态),1 = 整片湿透。参考的 "white" 默认是给
     //       材质贴图槽用的,这里是引擎全局,所以默认取干。
-    //: param custom { "default": 0.0, "label": "[H14] 雨痕量(引擎 3D 雨痕图)", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+    //: param custom { "default": 0.0, "label": "[H14] 雨痕量(替代引擎 3D 雨痕体积图)", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
     uniform float f_SilkWetStreak;
   //- endregion
 
