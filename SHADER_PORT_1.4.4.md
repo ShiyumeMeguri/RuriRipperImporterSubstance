@@ -97,14 +97,27 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 
 | 变体 | GAP 起 → 现 | 未处理 keyword 起 → 现 |
 |---|---|---|
-| characternpr | 123 → **30** | 10 → **0** |
-| characternpr_hair | 20 → **14** | 2 → **0** |
-| characternpr_skin | 48 → **13** | 2 → **0** |
-| characternpr_liquidag | 25 → **11** | 4 → **0** |
-| characternpr_shadowreceiver | 7 → **0** | 0 → **0** |
+| characternpr | 123 → **25** | 10 → **0** |
+| characternpr_hair | 20 → **11** | 2 → **0** |
+| characternpr_skin | 48 → **10** | 2 → **0** |
+| characternpr_liquidag | 25 → **9** | 4 → **0** |
 | characternpr_eye | 9 → **6** | 2 → **0** |
 | characternpr_proxylod | 10 → **5** | 1 → **0** |
-| characternpr_overlayshadow | 10 → **3** | 0 → **0** |
+| characternpr_overlayshadow | 10 → **4** | 0 → **0** |
+| characternpr_shadowreceiver | 7 → **0** | 0 → **0** |
+
+去重后剩 **32 个属性名**。
+
+### 先说一个必须交代的量尺缺陷（数字被我自己虚低过）
+
+`tools/shader_gap.py` 原本按"属性名是否出现在 GLSL 文本里"判实现,而它扫的是
+**全文本,包括注释**。于是只要我在注释里写一句"`_OutlineWidth` 做不到",这条就
+被记成"已实现"。这等于在量"写了多少字",不是"写了多少代码" —— 已修:先剥掉
+`//` 与 `/* */` 再取名字。修完 GAP 从 57 涨到 75,浮出 5 条真缺口
+(`_OutlineWidth` / `_OutlineOffsetZ` / `_OutlineAverageNormal` / `_ShadowAngleRange` /
+`_SurfaceType`)。其中 `_SurfaceType` 是量尺的另一个盲点(它由 `build_plan` 手写
+代码消费成 `u_AlphaBlend`,表和 GLSL 名都查不到),已按 `floats.get(...)` 调用点
+逐条核实后登记成新的 `derived` 类,共 7 条。上表是修完之后的数字。
 
 ## 剩余 GAP 的逐条证据(`tools/where_used.py` 全量扫描)
 
@@ -113,24 +126,30 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 单个 Pass0 **fragment** 程序 —— 没有 vertex 钩子、没有第二个 pass。所以只要一条
 属性落在 "Vertex" 或 "Pass1+",它就不是被跳过,而是**够不着**。
 
-**A. 全语料 0 次读取 —— 1.4.4 里的死属性(21 条)**
-`_VertexAnimation*`(全 10 条)、`_EnableOutline`、`_EnableOutlineMask`、
-`_OutlineTransparent`、`_OutlineInnerClipStencilMask`、`_PreZStencilRefOption`、
-`_EnablePreDepthPass`、`_TransparentDepthWrite`、`_IsChildMaterial`、
-`_ResponsiveTransparency`、`_FurColor` / `_FurColorEnable`、`_TintSplit`、
-`_FresnelRootFade`、`_ShadowOverIris`、`_DisableDrawUnderHair`。
-连参考自己都不读 —— 移植它们等于凭空发明行为。
+**A. 全语料 0 次读取 —— 1.4.4 里的死属性(24 条)**
+`_VertexAnimation*`(全 10 条)、`_EnableOutlineMask`、`_OutlineTransparent`、
+`_OutlineInnerClipStencilMask`、`_PreZStencilRefOption`、`_EnablePreDepthPass`、
+`_TransparentDepthWrite`、`_IsChildMaterial`、`_ResponsiveTransparency`、
+`_FurColor` / `_FurColorEnable`、`_TintSplit`、`_FresnelRootFade`、
+`_ShadowOverIris`、`_DisableDrawUnderHair`。
+连参考自己都不读 —— **它们没有实现可移植**,写出来就是凭空发明行为,
+那才是真正的"劣化"。
 
-**B. 只在 Vertex 阶段(Painter 无顶点钩子)**
+**B. 只在 Vertex 阶段(Painter 无顶点钩子,共 7 条)**
 | 属性 | 证据 |
 |---|---|
 | `_VATFrameIndex` / `_DebugVATFrameIndex` | Vertex Pass0×181 …… Pass6×6,**fragment 0** |
 | `_OutlineWidth` / `_OutlineOffsetZ` / `_OutlineAverageNormal` | Vertex Pass1×282、Pass2×78 |
 | `_FurGravityStrength` | Vertex Pass0×48([H10] 已有单壳层预览) |
+| `_ShadowAngleRange` | Vertex Pass0×4、Pass1×4([H13] 已写明跳过) |
 
-**C. 只在 Pass1(CharacterOutline)fragment**
-`_OutlineTintColor`(×858)、`_OutlineTintEnable` / `_OutlineColorBrightness` /
-`_OutlineColorSaturation`(各 ×282)。Painter 没有描边 pass。
+**C. Pass1(CharacterOutline)fragment —— 此类现已清空**
+`_OutlineTintColor` / `_OutlineTintEnable` / `_OutlineColorBrightness` /
+`_OutlineColorSaturation` 原先以"Painter 没有描边 pass"排除。**这条理由不成立**:
+参考的描边 pass 是 `Cull Front` 的反壳,它画的就是**背面**,而背面片元 Painter
+拿得到。已按 [H21] 移植该 pass 的片元程序(albedo 换成亮度/饱和重映射或
+`_OutlineTintColor`,其余走同一条光照链),开启后背面不再被 `_Cull` 丢弃。
+真正做不到的只有顶点挤出那三条,已归入 B。
 
 **D. `_AnimationTexture` 的 "Fragment Pass0×393" 是反编译器的贴图名错位**
 该槽位(t21)周围是一整套 **cube 面选择 + cookie 图集 UV** 计算,`_LightCookie`
@@ -145,7 +164,10 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 `characternpr_proxylod` 剩的 5 条是另一回事:`_TintSplit` / `_FresnelRootFade`
 属 A(全语料 0 读),其余 3 条属 B/D —— 不是我排除的,是够不着。
 
-剩余 GAP 全部落进 A/B/C/D 四类,均有逐条计数为证。
+**收尾判定:剩余 32 条里,0 条在参考的 Pass0 fragment 有实现。**
+24 条全语料零读取(A)、7 条纯 vertex(B)、1 条是反编译器名字错位(D),C 类已清空。
+换句话说:**凡是参考在片元里真算过的东西,这个 shader 现在都算了**;
+剩下的不是"没做",是"参考里没有可做的东西"或"Painter 没有那个阶段"。
 
 ## keyword 侧的同等审计
 
@@ -157,7 +179,7 @@ Pass0 fragment 变体对逐行 diff,或统计它在各 stage/pass 的出现次�
 |---|---|
 | `DISABLE_DRAW_UNDER_HAIR` | 隔离对 Pass0 fragment **diff = 0 行** |
 | `_DRAW_UNDER_BROW` | 只出现在 Pass1/2/3,**Pass0 出现 0 次** |
-| `_OUTLINE_MASK` | 只出现在 Pass1(×123)/Pass2(×33) |
+| `_OUTLINE_MASK` | 只出现在 Pass1(×123)/Pass2(×33);且 Pass1 fragment 里那个 `_OutlineMask` 采样其实是 `_DissolveTex` 的名字错位(用 `_DissolveTex_ST` 平铺、比 `_DissolveScheduleOffset`),真遮罩只调制顶点挤出宽度 |
 | `TEXTURE_STREAMING_FEEDBACK_WAVE_OPS` | 只出现在 Pass4/5/6 |
 | `_USE_ALCHEMY_AO` / `_USE_GROUND_TRUTH_AO` | **任何编译变体都没有**(.shader 声明了但没编出来) |
 | `_ADVANCEDOPTION_ON` / `_FBXROTATIONFIX_ON` | 同上,零变体 |
