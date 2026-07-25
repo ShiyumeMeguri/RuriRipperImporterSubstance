@@ -65,6 +65,10 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 - [x] `_Cull`(参考是 pass 渲染状态,片元按朝向 discard 得到同样的可见结果)
 - [x] liquidag:`_ALPHA_SCENE_DEPTH_FADE`([H11] 距离滑条代替场景深度)、
       `_OutlineColorMap` 液体附着细节法线([H19] 两根滑条代替引擎逐实例量)
+- [x] **Part 8 ShadowReceiver**(`characternpr_shadowreceiver` 整份变体):
+      阴影色/强度、关主光阴影、关角色自阴影、Circle Fade 距离+羽化、Capsule AO 色。
+      乘法叠帧沿用 [H13] 的改写,但拆分 `w = 1-min3(M)`、`B = (M-min3(M))/w`
+      满足 `lerp(1,B,w) ≡ M`,是**代数恒等**不是近似;四个引擎量([H20])走滑条。
 
 **两条早先的"空功能"判断是错的,已收回并补做:**
 `DITHER_SPHERE` 和 `_DisableRainEffectOnMaterial` 我按抽样到的单个文件下的结论,
@@ -97,7 +101,7 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 | characternpr_hair | 20 → **14** | 2 → **0** |
 | characternpr_skin | 48 → **13** | 2 → **0** |
 | characternpr_liquidag | 25 → **11** | 4 → **0** |
-| characternpr_shadowreceiver | 7 → **7** | 0 → **0** |
+| characternpr_shadowreceiver | 7 → **0** | 0 → **0** |
 | characternpr_eye | 9 → **6** | 2 → **0** |
 | characternpr_proxylod | 10 → **5** | 1 → **0** |
 | characternpr_overlayshadow | 10 → **3** | 0 → **0** |
@@ -134,15 +138,38 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 `_VATFrameIndex` 是纯 vertex(见 B)。这正是本战役反复吃过的那个坑:
 **贴图按用途认,只信 cbuffer 里的标量名**。
 
-**E. `characternpr_shadowreceiver` 的 7 条全部是 Pass0 fragment,但对象不同**
-`_ShadowColor`(×8)、`_CircleFade` / `_CircleFadeDistance` / `_CircleFadeSmoothness`、
-`_CapsuleAoColor`、`_DisableCharacterSelfShadow`、`_DisableSceneShadow`。
-这是**角色脚下那块接影地面片**的材质:它不贴在角色网格上,没有 BaseMap/法线/
-PBR 通道,画的是投影本身。Painter 是给角色网格刷贴图的,这份材质在这里没有
-可绘制的通道 —— 不是够不着,是**不属于这个 uber shader 的对象**。
-`characternpr_proxylod` 同理(远景替身,只有一套简化色)。
+**E.(已收回)`characternpr_shadowreceiver` —— 我以"对象不同"排除过它,不成立**
+那 7 条确实全在 Pass0 fragment 被真消费,**够得着**。"它是脚下那块接影地面片、
+不是角色表面"是**范围选择**,不是技术限制 —— 而要求是"全变体全功能"。
+现已实装为 **Part 8 ShadowReceiver**,7 条属性全部落地,GAP 7 → **0**。
+`characternpr_proxylod` 剩的 5 条是另一回事:`_TintSplit` / `_FresnelRootFade`
+属 A(全语料 0 读),其余 3 条属 B/D —— 不是我排除的,是够不着。
 
-除 E 之外,剩余 GAP 全部落进 A/B/C/D 四类,均有逐条计数为证。
+剩余 GAP 全部落进 A/B/C/D 四类,均有逐条计数为证。
+
+## keyword 侧的同等审计
+
+属性表只能查"材质属性",查不到纯 keyword 驱动的功能。所以对
+`IGNORED_KEYWORDS` 里每一条也做了同样的实证(找**只差这一个 keyword** 的
+Pass0 fragment 变体对逐行 diff,或统计它在各 stage/pass 的出现次数):
+
+| keyword | 实证结果 |
+|---|---|
+| `DISABLE_DRAW_UNDER_HAIR` | 隔离对 Pass0 fragment **diff = 0 行** |
+| `_DRAW_UNDER_BROW` | 只出现在 Pass1/2/3,**Pass0 出现 0 次** |
+| `_OUTLINE_MASK` | 只出现在 Pass1(×123)/Pass2(×33) |
+| `TEXTURE_STREAMING_FEEDBACK_WAVE_OPS` | 只出现在 Pass4/5/6 |
+| `_USE_ALCHEMY_AO` / `_USE_GROUND_TRUTH_AO` | **任何编译变体都没有**(.shader 声明了但没编出来) |
+| `_ADVANCEDOPTION_ON` / `_FBXROTATIONFIX_ON` | 同上,零变体 |
+| `_ALPHABLEND_ON` / `_ALPHATEST_ON` | 已分别折进 `u_AlphaBlend` / `u_AlphaClip` |
+| `_CHARACTER_FUR` | 隔离对 diff 3180 行 = Fur 分支本体,已由 Part 4 承接 |
+
+Fur 片元侧的覆盖度另做了核对:ON 侧 Pass0 fragment 真读的 `_Fur*` 共 12 条,
+GLSL 全有;唯一多出的 `_FurGravityStrength` 在片元里只是 cbuffer 声明,真实
+读取只在 vertex(壳层挤出,[H10])。
+
+反过来,`DITHER_SPHERE`(Pass0 fragment ×12)和 `_REALISTIC_LIGHTING`(×6)
+正是靠这套统计翻出来的 —— 它们本来被我误判成空功能。
 
 ## 要实现的清单（片元级,按影响排序）
 
@@ -181,13 +208,15 @@ PBR 通道,画的是投影本身。Painter 是给角色网格刷贴图的,这份
 `_ALPHA_SCENE_DEPTH_FADE` + `_DepthFadeValue/_DepthFadeExp`、`_ENEMY_HIT_FLASH`、
 `_OutlineColorMap`。液体/黏液角色材质。
 
-### 明确不做（理由见上面"剩余 GAP 的逐条证据",不再是断言）
+### 明确不做（理由见上面两节的实证,不再是断言）
 
 - **A/B/C/D 四类**:死属性、顶点级、Pass1 描边、反编译器名字错位。
-- **E**:`characternpr_shadowreceiver` / `characternpr_proxylod`,不是角色表面材质。
-- `TEXTURE_STREAMING_FEEDBACK_WAVE_OPS` / `HG_ENABLE_MV` / `SRP_INSTANCING_ON`:
-  引擎批处理与 streaming 反馈,与着色结果无关。
+- `HG_ENABLE_MV` / `SRP_INSTANCING_ON` / `HG_ENABLE_PER_OBJECT_MV` /
+  `HG_ENABLE_SCREEN_SPACE_SHADOW_MASK`:引擎批处理与运动矢量,与着色结果无关。
 - **SDF / PBR**:按要求保留现有的**故意偏离**,不对齐。
+
+**8 份变体的片元级功能到此全部落地**:凡是 Pass0 fragment 真读过的东西,
+现在要么实装、要么有 [H] 编号写明"引擎给的量换成了哪根滑条"。
 
 ## 移植方法（每个功能都走同一条路,不猜）
 

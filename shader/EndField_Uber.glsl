@@ -46,6 +46,17 @@
        混合等价逼近：输出阴影染色 _BaseColor.rgb + alpha=变暗权重(texR·a²)，强制半透明
        (forceAlphaBlend, 否则该材质 _SurfaceType 非透明会被渲成挡眼的白色不透明面片)。
        眼白 fb≈1 时 over 与真乘法逐像素相等。顶点视空间偏移 _ShadowAngleRange 跳过。
+  [H14] 丝袜湿身的湿润度来自天气/雨系统(参考 max(角色浸润, 雨量/255)) → f_SilkWetness。
+  [H15] 受击闪白的 Fresnel 项乘引擎全局曝光 _ExposureWithMiscParams.y → f_HitFlashExposure。
+  [H16] 溶解取 max(_DissolveScheduleOffset, 引擎逐物体进度) → 只留材质那一半 + 滑条。
+  [H17] VFX 屏幕 UV 需要 _ScreenParams → f_ScreenSize(默认 1920×1080)。
+  [H18] 抖动球焦点是 _VFXParams0.xyz(角色位置)、抖动量是引擎逐物体量
+        → f_DitherSphereFocus / f_DitherAmount。
+  [H19] liquidag 液体附着的进度字节(_CharacterParams10 引擎逐实例)与平铺
+        (_CharacterParams10.z) → f_LiquidProgress / f_LiquidTiling;液面轴取世界 Y。
+  [H20] ShadowReceiver 的四个引擎量:主光级联阴影、_CharacterShadowmapTex 的 PCF、
+        阴影强度 _f_0[34].x、_VisibilitySHRT 屏幕胶囊可见度 SH → 四根滑条;
+        投影片原点 unity_ObjectToWorld[3].xyz → f_CircleFadeCenter。
   ====================================================================
 *************************************************************************/
 
