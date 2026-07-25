@@ -46,19 +46,28 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.append(_HERE)
 
-from . import bootstrap  # noqa: E402  (must precede the numpy-dependent imports)
+# config is stdlib-only, and the bootstrap must know where the workspace is
+# before it can find (or install) the private runtime folder.
+from . import config  # noqa: E402
+from .ruri_pybridge.runtime import bootstrap, pythonnet_bridge  # noqa: E402
 
-bootstrap.activate()
+config.activate_workspace()
+bootstrap.activate()  # must precede the numpy-dependent imports
 
-from . import config, pythonnet_bridge, ui  # noqa: E402
+from . import ui  # noqa: E402
 
+# Reloadable, in dependency order. The shared package is handled separately
+# (see reload_plugin) because part of it must never be reloaded.
 _SUBMODULES = (
-    "bootstrap", "config", "class_registry", "unity_yaml", "asset_db",
-    "bridge_asset_db", "mesh_decoder", "coordinate", "hierarchy",
-    "gltf_writer", "model_builder", "unity_material", "texture_pipeline",
-    "row_table", "pythonnet_bridge", "cabmap_state", "sp_apply", "importer",
-    "ui",
+    "config", "gltf_writer", "model_builder", "unity_material",
+    "texture_pipeline", "sp_apply", "importer", "ui",
 )
+
+# Shared modules whose globals track real process state that a reload would
+# desync from reality: the claimed CoreCLR runtime and loaded DLL type, the
+# installed runtime folder, a multi-second cabmap load, discovered placements.
+_STATEFUL_SHARED = ("runtime.bootstrap", "runtime.pythonnet_bridge",
+                    "session.cabmap_state", "session.scene_state")
 
 plugin_widgets = []
 _panel = None
@@ -73,7 +82,12 @@ def start_plugin():
 
     # Push the stored bin dir into the bridge BEFORE the early CoreCLR claim:
     # the claim needs it to find Ruri.RipperHook.CLI.runtimeconfig.json at all.
+    # The hint travels with it -- the shared bridge has no idea where THIS host
+    # keeps that setting, and its error message says so.
     pythonnet_bridge.set_bin_dir(config.get("ripperhook_bin", ""))
+    pythonnet_bridge.set_bin_dir_hint(
+        "Set it in the RuriRipper panel's 'RipperHook bin' field, or set the "
+        "RURI_RIPPERHOOK_BIN environment variable.")
 
     # Claim the process-wide CLR runtime (CoreCLR) as early as possible, before
     # any other plugin in python/plugins gets a chance to trigger its own lazy
@@ -89,8 +103,11 @@ def start_plugin():
         _log("early CoreCLR claim skipped: {0}".format(exc))
 
     # Non-blocking: a first-time pip install can take 10-60s and must not
-    # freeze Painter's UI. The panel gates its bridge actions on this.
-    bootstrap.ensure_async(_log)
+    # freeze Painter's UI. The panel gates its bridge actions on this. on_ready
+    # closes the window the synchronous claim above cannot cover: pythonnet only
+    # becoming importable partway through the session, after that claim
+    # already no-opped.
+    bootstrap.ensure_async(_log, on_ready=pythonnet_bridge.claim_runtime_early)
 
     _panel = ui.RuriRipperPanel()
     dock = substance_painter.ui.add_dock_widget(_panel)
@@ -149,10 +166,14 @@ def reload_plugin():
     would reset their globals to source defaults while the state they track
     (a CoreCLR runtime that can never be re-claimed once set, an installed
     runtime folder, a multi-second cabmap load) is still very much alive."""
-    stateful = {"bootstrap", "pythonnet_bridge", "cabmap_state"}
+    # Shared package first (sys.modules order puts parents before children), so
+    # the plugin modules reloaded after it pick up the new objects rather than
+    # holding references to the previous generation.
+    shared_prefix = __name__ + ".ruri_pybridge."
+    for name, module in list(sys.modules.items()):
+        if name.startswith(shared_prefix) and not name.endswith(_STATEFUL_SHARED):
+            importlib.reload(module)
     for name in _SUBMODULES:
-        if name in stateful:
-            continue
         module = sys.modules.get(__name__ + "." + name)
         if module is not None:
             importlib.reload(module)

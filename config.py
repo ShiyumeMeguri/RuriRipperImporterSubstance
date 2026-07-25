@@ -1,23 +1,30 @@
-"""Persisted, per-machine plugin settings.
+"""This plugin's settings: WHICH keys exist and what they mean.
 
-The Blender addon keeps the one genuinely machine-specific path (the built
-Ruri.RipperHook bin dir) in Blender's AddonPreferences so it never has to be
-hardcoded. Painter has no equivalent preference store for plugins, so this is
-the same idea backed by a small JSON file living beside the plugin's runtime
-folder in the user's Painter resources directory -- never inside the plugin
-package itself, which is a checkout that gets replaced wholesale.
+The store itself (defaults, unknown-key rejection, versioned repair, atomic
+writes) is ``ruri_pybridge.runtime.settings`` -- none of that is
+Painter-specific. What is Painter-specific is everything below: the key set, and
+where the workspace lives (the user's Painter resources directory, never inside
+this package, which is a checkout that gets replaced wholesale).
 
-Everything the plugin needs to find on disk is either derived from
-``__file__`` (the bundled shader, the texture cache) or stored here (the
-RipperHook bin dir, the game root, the cabmap path, the hook selection). There
-are no hardcoded absolute paths anywhere in this package.
+The Blender add-on keeps its one genuinely machine-specific path in Blender's
+own AddonPreferences; Painter has no equivalent for plugins, hence the file.
+
+Everything the plugin needs to find on disk is either derived from ``__file__``
+(the bundled shader) or stored here (the RipperHook bin dir, the game root, the
+cabmap path, the hook selection). There are no hardcoded absolute paths
+anywhere in this package.
 """
 
 from __future__ import annotations
 
-import json
 import os
-import threading
+
+try:
+    from .ruri_pybridge.runtime import settings as _settings
+    from .ruri_pybridge.runtime import workspace as _workspace
+except ImportError:  # standalone (non-package) testing
+    from ruri_pybridge.runtime import settings as _settings
+    from ruri_pybridge.runtime import workspace as _workspace
 
 _DEFAULTS = {
     # Folder that directly contains Ruri.RipperHook.dll AND
@@ -77,8 +84,10 @@ _OPTION_KEYS = (
     "force_linear_tonemap",
 )
 
-_lock = threading.Lock()
-_cache = None
+_IMPORT_OPTION_KEYS = (
+    "lod0_only", "import_shadow_proxies", "import_inactive", "import_normals",
+    "import_colors", "import_tangents", "keep_unity_uv_origin",
+)
 
 
 def plugin_dir():
@@ -99,7 +108,11 @@ def user_resources_dir():
 
 def workspace_dir():
     """Everything this plugin generates (settings, installed runtime, model and
-    texture cache) lives under one folder outside the package."""
+    texture cache) lives under one folder outside the package.
+
+    Registered with the shared workspace resolver at plugin start, so
+    ``bootstrap``'s ABI-keyed runtime folder lands in the same place it always
+    has: <Painter user resources>/python/RuriRipperWorkspace/runtime/<abi>."""
     path = os.path.join(user_resources_dir(), "RuriRipperWorkspace")
     os.makedirs(path, exist_ok=True)
     return path
@@ -111,89 +124,41 @@ def cache_dir():
     return path
 
 
-def _settings_path():
-    return os.path.join(workspace_dir(), "settings.json")
+def activate_workspace():
+    """Point the shared workspace resolver at this plugin's own folder. Call
+    once, before anything reads settings or touches the bootstrap."""
+    _workspace.configure(workspace_dir())
 
 
-def _migrate(data, stored):
-    """Repair a settings file written by a panel that saved mid-load.
-
-    Version 1 connected each widget's change signal before populating the
-    widgets FROM the settings, so the first setChecked() during load fired a
-    save of the still-empty widget row -- persisting every option as off and
-    the resolution as the combo box's first entry, right over the real
-    defaults. Reset the option block once (the typed paths and hook selection
-    are the user's own input and are kept), then stamp the new version so this
-    never runs again. Version 2 predates the mandatory Unity -> glTF UV V flip,
-    whose option key changed shape entirely."""
-    if stored.get("settings_version", 1) >= _DEFAULTS["settings_version"]:
-        return False
-    for key in _OPTION_KEYS:
-        data[key] = _DEFAULTS[key]
-    data["settings_version"] = _DEFAULTS["settings_version"]
-    return True
+# Version 1 of this file was written by a panel that connected each widget's
+# change signal BEFORE populating the widgets from the settings, so the first
+# setChecked() during load fired a save of the still-empty widget row --
+# persisting every option as off and the resolution as the combo box's first
+# entry, right over the real defaults. Version 2 predates the mandatory
+# Unity -> glTF UV V flip, whose option key changed shape entirely. Bumping
+# settings_version resets exactly the option block; typed paths and the hook
+# selection are the user's own input and survive.
+_STORE = _settings.JsonSettings(
+    os.path.join(workspace_dir(), "settings.json"), _DEFAULTS, _OPTION_KEYS)
 
 
 def load():
-    global _cache
-    with _lock:
-        if _cache is not None:
-            return _cache
-        data = dict(_DEFAULTS)
-        repaired = False
-        try:
-            with open(_settings_path(), "r", encoding="utf-8") as handle:
-                stored = json.load(handle)
-            if isinstance(stored, dict):
-                for key, value in stored.items():
-                    if key in _DEFAULTS:
-                        data[key] = value
-                repaired = _migrate(data, stored)
-        except (OSError, ValueError):
-            pass
-        _cache = data
-    if repaired:
-        save()
-    return _cache
+    return _STORE.load()
 
 
 def get(key, default=None):
-    return load().get(key, _DEFAULTS.get(key, default))
+    return _STORE.get(key, default)
 
 
 def set_many(**values):
-    data = load()
-    changed = False
-    for key, value in values.items():
-        if key not in _DEFAULTS:
-            continue
-        if data.get(key) != value:
-            data[key] = value
-            changed = True
-    if changed:
-        save()
-    return changed
+    return _STORE.set_many(**values)
 
 
 def save():
-    data = load()
-    try:
-        with open(_settings_path(), "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2, ensure_ascii=False)
-    except OSError:
-        pass
+    return _STORE.save()
 
 
 def import_options():
     """The option dict the model builder consumes -- same keys/meanings as the
     Blender addon's ``_ImportOptionsMixin.as_options``."""
-    data = load()
-    return {
-        "lod0_only": bool(data.get("lod0_only", True)),
-        "import_shadow_proxies": bool(data.get("import_shadow_proxies", False)),
-        "import_inactive": bool(data.get("import_inactive", True)),
-        "import_normals": bool(data.get("import_normals", True)),
-        "import_colors": bool(data.get("import_colors", True)),
-        "import_tangents": bool(data.get("import_tangents", True)),
-        "keep_unity_uv_origin": bool(data.get("keep_unity_uv_origin", False)),
-    }
+    return _STORE.subset(_IMPORT_OPTION_KEYS, bool)

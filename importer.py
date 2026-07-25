@@ -27,16 +27,15 @@ import substance_painter.event
 import substance_painter.project
 
 try:
-    from . import (asset_db, bridge_asset_db, config, model_builder, sp_apply,
-                   texture_pipeline, unity_material)
+    from . import config, model_builder, sp_apply, texture_pipeline, unity_material
+    from .ruri_pybridge.unity import asset_db, bridge_asset_db
 except ImportError:  # standalone (non-package) testing
-    import asset_db
-    import bridge_asset_db
     import config
     import model_builder
     import sp_apply
     import texture_pipeline
     import unity_material
+    from ruri_pybridge.unity import asset_db, bridge_asset_db
 
 
 class ImportJob:
@@ -241,7 +240,10 @@ def jobs_from_cabs(bridge, cab_names, progress=None):
     """
     if progress is not None:
         progress("Resolving dependency closure...")
-    documents, textures, roots, seed_roots, scene_roots = bridge.import_cabs(cab_names)
+    # clips_by_cab is the animation half of the export -- Painter has no
+    # animation surface, so it is deliberately unused here.
+    documents, textures, roots, seed_roots, _clips_by_cab, scene_roots = \
+        bridge.import_cabs(cab_names)
     db = bridge_asset_db.BridgeAssetDatabase(documents, textures)
     options = config.import_options()
 

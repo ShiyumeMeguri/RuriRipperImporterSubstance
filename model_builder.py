@@ -21,16 +21,20 @@ import os
 import numpy as np
 
 try:
-    from . import coordinate, gltf_writer, hierarchy, mesh_decoder
+    from . import gltf_writer
+    from .ruri_pybridge.math3d import coordinate as _coordinate
+    from .ruri_pybridge.unity import (hierarchy, material as unity_material_props,
+                                      mesh_decoder, prefab as prefab_scan, skinning)
 except ImportError:  # standalone (non-package) testing
-    import coordinate
     import gltf_writer
-    import hierarchy
-    import mesh_decoder
+    from ruri_pybridge.math3d import coordinate as _coordinate
+    from ruri_pybridge.unity import (hierarchy, material as unity_material_props,
+                                     mesh_decoder, prefab as prefab_scan, skinning)
 
-# Unity ShadowCastingMode.ShadowsOnly -- these renderers are invisible to the
-# camera (shadow proxies) and are skipped unless explicitly requested.
-_SHADOWS_ONLY = 3
+# Unity -> glTF: negate X, flip V, re-wind faces, keep tangent handedness. All
+# four are one reflection's consequences -- see the shared Space's docstring.
+coordinate = _coordinate.GLTF
+
 
 DEFAULT_OPTIONS = {
     "lod0_only": True,
@@ -107,116 +111,6 @@ def resolve_options(options):
     return merged
 
 
-# ---------------------------------------------------------------------------
-# Renderer discovery (ported 1:1 from prefab_importer)
-# ---------------------------------------------------------------------------
-def _lod_discard_set(prefab):
-    """The set of renderer fileIDs that belong to LOD1+ (to discard)."""
-    keep = set()
-    discard = set()
-    for group in prefab.all("LODGroup"):
-        lods = group.data.get("m_LODs") or []
-        for level, lod in enumerate(lods):
-            for ref in (lod.get("renderers") or []):
-                renderer = ref.get("renderer") if isinstance(ref, dict) else None
-                fid = renderer.get("fileID") if isinstance(renderer, dict) else None
-                if fid is None:
-                    continue
-                if level == 0:
-                    keep.add(fid)
-                else:
-                    discard.add(fid)
-    return discard - keep
-
-
-def _go_name(prefab, go_id):
-    go = prefab.get(go_id)
-    return str(go.data.get("m_Name", "Object")) if go else "Object"
-
-
-def _bake_bind_pose(decoded, smr_bones, file_id_to_world):
-    """Transform mesh-local vertices to their bind-pose world positions.
-
-        bind_world(v) = sum_j w_j * (boneWorld_j @ bindpose_j) @ v_local
-
-    This reconstructs the exact pose the mesh has at rest, in world space --
-    the pose a skinned renderer actually displays, and therefore the only
-    correct one to texture on. Returns True when the bake ran.
-
-    Ported verbatim from prefab_importer._bake_bind_pose; the mesh data is
-    still in Unity space at this point, so nothing here is affected by the
-    glTF-vs-Blender difference in target coordinate system.
-    """
-    if (decoded.bind_poses is None or decoded.bone_weights is None
-            or decoded.bone_indices is None or not smr_bones):
-        return False
-    n = len(decoded.positions)
-    n_bones = len(smr_bones)
-    world = np.tile(np.eye(4, dtype=np.float64), (n_bones, 1, 1))
-    for slot, ref in enumerate(smr_bones):
-        fid = ref.get("fileID") if isinstance(ref, dict) else None
-        wmat = file_id_to_world.get(fid)
-        if wmat is not None:
-            world[slot] = wmat
-    bind = decoded.bind_poses.astype(np.float64)
-    count = min(n_bones, bind.shape[0])
-    skin = np.tile(np.eye(4, dtype=np.float64), (n_bones, 1, 1))
-    skin[:count] = world[:count] @ bind[:count]
-
-    idx = np.clip(decoded.bone_indices, 0, n_bones - 1)
-    weights = decoded.bone_weights
-    vh = np.concatenate([decoded.positions.astype(np.float64),
-                         np.ones((n, 1))], axis=1)
-    baked = np.zeros((n, 3), dtype=np.float64)
-    for j in range(idx.shape[1]):
-        mats = skin[idx[:, j]]
-        transformed = np.einsum("nij,nj->ni", mats, vh)[:, :3]
-        baked += weights[:, j, None] * transformed
-    decoded.positions = baked.astype(np.float32)
-
-    # Normals (and tangents) transform by the INVERSE TRANSPOSE of the linear
-    # part, not by the linear part itself. They coincide for a rigid bone, but
-    # a bone carrying non-uniform scale (Unity rigs do use them -- squash bones,
-    # mirrored limbs with a negative axis) would otherwise shear the normals
-    # away from the surface and light the mesh wrongly.
-    linear = skin[:, :3, :3]
-    normal_mats = linear.copy()
-    invertible = np.abs(np.linalg.det(linear)) > 1e-12
-    if invertible.any():
-        normal_mats[invertible] = np.linalg.inv(linear[invertible]).transpose(0, 2, 1)
-
-    def _blend(vectors, mats_by_bone):
-        out = np.zeros((n, 3), dtype=np.float64)
-        for j in range(idx.shape[1]):
-            out += weights[:, j, None] * np.einsum(
-                "nij,nj->ni", mats_by_bone[idx[:, j]], vectors)
-        lengths = np.linalg.norm(out, axis=1, keepdims=True)
-        lengths[lengths < 1e-6] = 1.0
-        return (out / lengths).astype(np.float32)
-
-    if decoded.normals is not None:
-        decoded.normals = _blend(decoded.normals.astype(np.float64), normal_mats)
-    if decoded.tangents is not None:
-        # The tangent is a real surface direction (dP/du), so unlike the normal
-        # it follows the linear part; its w handedness is unaffected by a
-        # skin transform and is carried through untouched.
-        baked_t = _blend(decoded.tangents[:, :3].astype(np.float64), linear)
-        decoded.tangents = np.concatenate(
-            [baked_t, decoded.tangents[:, 3:4].astype(np.float32)], axis=1)
-    return True
-
-
-# ---------------------------------------------------------------------------
-# Material table
-# ---------------------------------------------------------------------------
-def _material_name(document, guid):
-    if document is not None:
-        name = document.data.get("m_Name")
-        if name:
-            return str(name)
-    return "Material_{0}".format((guid or "unknown")[:8])
-
-
 def _register_material(result, db, ref, renderer_name):
     """Resolve a {fileID, guid} material reference into the result's material
     table, keyed by the Texture Set name Painter will end up using."""
@@ -228,7 +122,7 @@ def _register_material(result, db, ref, renderer_name):
     guid = guid.lower()
     unity_file = db.load_guid(guid)
     document = unity_file.first("Material") if unity_file else None
-    name = _material_name(document, guid)
+    name = unity_material_props.material_name(document, guid)
 
     existing = result.materials.get(name)
     if existing is None:
@@ -326,59 +220,28 @@ def _primitives_from_decoded(decoded, material_indices, options, submesh_range=N
     return primitives
 
 
-_TOPOLOGY_NAMES = {1: "Quads", 2: "Lines", 3: "LineStrip", 4: "Points"}
-
-
-def _diagnose_empty_mesh(mesh_doc, name):
-    """Why a Mesh decoded to nothing. Unity can store geometry in three places
-    and the YAML decoder only reads one of them, so an empty result has to say
-    WHICH of the other two is holding the data instead of silently vanishing."""
-    data = mesh_doc.data
-    compressed = data.get("m_CompressedMesh") or {}
-    vertices = compressed.get("m_Vertices") or {}
-    if int(vertices.get("m_NumItems") or 0) > 0:
-        return ("'{0}' is a COMPRESSED mesh (Model Importer > Mesh Compression). Its vertex "
-                "data is bit-packed in m_CompressedMesh, which this decoder does not read -- "
-                "re-import the model with Mesh Compression = Off.".format(name))
-    stream = data.get("m_StreamData") or {}
-    if int(stream.get("size") or 0) > 0 or (stream.get("path") or ""):
-        return ("'{0}' keeps its vertex data in an external stream file ({1}); the YAML "
-                "carries none. Export with the resource file resolved.".format(
-                    name, stream.get("path") or "?"))
-    topologies = {int(sm.get("topology") or 0) for sm in (data.get("m_SubMeshes") or [])}
-    exotic = sorted(t for t in topologies if t != 0)
-    if exotic and 0 not in topologies:
-        return "'{0}' has no triangle submeshes (topology {1}) -- nothing to texture.".format(
-            name, ", ".join(_TOPOLOGY_NAMES.get(t, str(t)) for t in exotic))
-    return "'{0}' decoded to zero vertices.".format(name)
-
-
 def _decode_mesh_ref(db, mesh_ref, result, owner):
-    if not isinstance(mesh_ref, dict) or not mesh_ref.get("guid"):
+    """Resolve + decode a mesh reference (shared), then say -- in Painter's own
+    terms -- whatever the result costs the user."""
+    loaded = prefab_scan.load_mesh(db, mesh_ref, owner)
+    if not loaded.ok:
+        if loaded.problem == "not_found":
+            result.warnings.append("{0}: mesh {1} not found in the resolved closure".format(
+                owner, loaded.detail[:8]))
+        elif loaded.problem == "no_mesh_document":
+            result.warnings.append("{0}: referenced asset holds no Mesh document".format(owner))
+        elif loaded.problem == "empty":
+            result.warnings.append("{0}: {1}".format(owner, loaded.detail))
         return None
-    mesh_file = db.load_guid(mesh_ref["guid"])
-    if mesh_file is None:
-        result.warnings.append("{0}: mesh {1} not found in the resolved closure".format(
-            owner, str(mesh_ref.get("guid"))[:8]))
-        return None
-    mesh_doc = mesh_file.first("Mesh")
-    if mesh_doc is None:
-        result.warnings.append("{0}: referenced asset holds no Mesh document".format(owner))
-        return None
-    decoded = mesh_decoder.decode_mesh(mesh_doc)
-    name = str(mesh_doc.data.get("m_Name", owner))
-    if decoded.positions is None or len(decoded.positions) == 0:
-        result.warnings.append("{0}: {1}".format(owner, _diagnose_empty_mesh(mesh_doc, name)))
-        return None
+    decoded = loaded.decoded
 
     # Partial losses, where SOMETHING still comes through: say so rather than
     # letting the difference show up later as a shading or seam mystery.
-    dropped = sorted({int(sm.get("topology") or 0)
-                      for sm in (mesh_doc.data.get("m_SubMeshes") or [])} - {0})
-    if dropped:
+    if loaded.dropped_topologies:
         result.warnings.append(
             "{0}: dropped {1} submesh(es) -- only triangle lists can be textured.".format(
-                owner, ", ".join(_TOPOLOGY_NAMES.get(t, str(t)) for t in dropped)))
+                owner, ", ".join(mesh_decoder.TOPOLOGY_NAMES.get(t, str(t))
+                                 for t in loaded.dropped_topologies)))
     if decoded.normals is None:
         result.warnings.append(
             "{0}: stored normals were unusable (absent, or they failed the unit-length "
@@ -550,84 +413,30 @@ def build_from_prefab(db, prefab, name, out_path, options=None):
     file_id_to_world = hierarchy.world_matrices(nodes)
     go_to_node = {n.go_id: n for n in nodes.values()}
 
-    discard = _lod_discard_set(prefab) if options["lod0_only"] else set()
-
-    def _accept(renderer, node):
-        """Shared per-renderer gate. Returns False when this renderer must not
-        contribute geometry, having already counted why."""
-        if renderer.file_id in discard:
-            result.skipped_lod += 1
-            return False
-        if (not options["import_shadow_proxies"]
-                and renderer.data.get("m_CastShadows") == _SHADOWS_ONLY):
-            result.skipped_shadow += 1
-            return False
-        # A disabled Renderer component, or one on a deactivated GameObject,
-        # draws nothing in Unity. It is still imported by default (these are
-        # routinely runtime-toggled variants, and silently losing geometry is
-        # worse than an extra Texture Set) -- but never silently.
-        disabled = (renderer.data.get("m_Enabled") == 0
-                    or (node is not None and not node.active))
-        if disabled:
-            if options["import_inactive"]:
-                result.inactive_included += 1
-            else:
-                result.skipped_inactive += 1
-                return False
-        return True
-
-    def _static_batch_range(renderer):
-        """Unity's static batching merges several objects into one shared mesh
-        and gives each renderer a window into it; drawing the whole mesh would
-        pull in the other objects' geometry AND shift every material slot."""
-        info = renderer.data.get("m_StaticBatchInfo") or {}
-        count = int(info.get("subMeshCount") or 0)
-        if count <= 0:
-            return None
-        return int(info.get("firstSubMesh") or 0), count
-
-    for smr in prefab.all("SkinnedMeshRenderer"):
-        go_id = (smr.data.get("m_GameObject") or {}).get("fileID")
-        node = go_to_node.get(go_id)
-        if not _accept(smr, node):
-            continue
-        display = _go_name(prefab, go_id)
-        decoded = _decode_mesh_ref(db, smr.data.get("m_Mesh"), result, display)
+    # Which renderers actually draw -- LODGroup levels, ShadowsOnly proxies,
+    # disabled/inactive GameObjects and static-batch windows -- is decided by the
+    # shared rules (ruri_pybridge.unity.prefab), so this plugin and the Blender
+    # add-on cannot disagree about what a prefab contains.
+    stats = prefab_scan.SkipStats()
+    for renderer in prefab_scan.iter_renderers(prefab, go_to_node, options, stats):
+        decoded = _decode_mesh_ref(db, renderer.mesh_ref, result, renderer.name)
         if decoded is None:
             continue
-        entries = [_register_material(result, db, ref, display)
-                   for ref in (smr.data.get("m_Materials") or [])]
-        smr_bones = smr.data.get("m_Bones") or []
-        baked = _bake_bind_pose(decoded, smr_bones, file_id_to_world)
-        if baked:
+        entries = [_register_material(result, db, ref, renderer.name)
+                   for ref in renderer.material_refs]
+        node = renderer.node
+        if renderer.is_skinned and skinning.bake_bind_pose(decoded, renderer.bones,
+                                                           file_id_to_world):
             # Vertices are already in world space -- the node must not move them again.
             node_matrix = None
         else:
             node_matrix = coordinate.convert_matrix(node.world) if node is not None else None
-        _emit(builder, result, display, decoded, node_matrix, entries, options,
-              _static_batch_range(smr))
-
-    for mr in prefab.all("MeshRenderer"):
-        go_id = (mr.data.get("m_GameObject") or {}).get("fileID")
-        node = go_to_node.get(go_id)
-        if not _accept(mr, node):
-            continue
-        if node is None:
-            continue
-        mesh_ref = None
-        for comp_id in node.components:
-            comp = prefab.get(comp_id)
-            if comp is not None and comp.class_name == "MeshFilter":
-                mesh_ref = comp.data.get("m_Mesh")
-                break
-        display = _go_name(prefab, go_id)
-        decoded = _decode_mesh_ref(db, mesh_ref, result, display)
-        if decoded is None:
-            continue
-        entries = [_register_material(result, db, ref, display)
-                   for ref in (mr.data.get("m_Materials") or [])]
-        _emit(builder, result, display, decoded, coordinate.convert_matrix(node.world),
-              entries, options, _static_batch_range(mr))
+        _emit(builder, result, renderer.name, decoded, node_matrix, entries, options,
+              renderer.submesh_range)
+    result.skipped_lod += stats.lod
+    result.skipped_shadow += stats.shadow
+    result.skipped_inactive += stats.inactive
+    result.inactive_included += stats.inactive_included
 
     result.face_basis = _measure_face_basis(result.landmarks, result)
     result.finish()

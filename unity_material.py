@@ -25,6 +25,11 @@ plugin's own channel/param maps -- the shader consuming them is unchanged.
 
 from __future__ import annotations
 
+try:
+    from .ruri_pybridge.unity import material as unity_props
+except ImportError:  # standalone (non-package) testing
+    from ruri_pybridge.unity import material as unity_props
+
 PART_NAMES = {
     0: "Standard", 1: "Face", 2: "Eyes", 3: "Hair",
     4: "Fur", 5: "Eyebrow", 6: "VFX", 7: "OverlayShadow",
@@ -436,93 +441,6 @@ class MaterialPlan:
 
 
 # ---------------------------------------------------------------------------
-# Parsing
-# ---------------------------------------------------------------------------
-def _flatten(entries):
-    """Normalize ``m_TexEnvs``/``m_Colors``/``m_Floats`` to ``{name: value}``.
-
-    A real Unity Editor "Force Text" save serializes these C# Dictionary fields
-    as a list of single-key maps (``- _BaseMap: {...}``); AssetRipper's own YAML
-    writer instead emits the same data as one nested map directly. Both are
-    valid on-disk shapes for the same data model -- accept either."""
-    if isinstance(entries, dict):
-        return entries
-    out = {}
-    for entry in entries or []:
-        if isinstance(entry, dict):
-            for key, value in entry.items():
-                out[key] = value
-    return out
-
-
-def _keywords(document):
-    """The material's ACTIVE shader keywords.
-
-    Unity has used three serialisations over time and an export can carry any
-    of them: ``m_ShaderKeywords`` (one space-separated string, pre-2021),
-    and the ``m_ValidKeywords`` / ``m_InvalidKeywords`` pair (2021+), where only
-    the valid list is enabled. All three are read; only enabled ones come back.
-    """
-    if document is None:
-        return set()
-    data = document.data
-    active = set()
-    legacy = data.get("m_ShaderKeywords")
-    if isinstance(legacy, str):
-        active.update(k for k in legacy.split() if k)
-    for entry in (data.get("m_ValidKeywords") or []):
-        if isinstance(entry, str) and entry:
-            active.add(entry)
-    return active
-
-
-def parse_material(document):
-    """(textures{prop: guid}, floats, colors{prop: [r,g,b,a]},
-    texture_st{prop: [sx,sy,ox,oy]}) from a parsed Unity Material document."""
-    props = (document.data.get("m_SavedProperties") or {}) if document is not None else {}
-    tex_envs = _flatten(props.get("m_TexEnvs"))
-    raw_colors = _flatten(props.get("m_Colors"))
-    # Unity 2021+ serialises integer-typed shader properties into m_Ints
-    # instead of m_Floats. They live in the same property namespace, so a
-    # toggle that moved there would read as "absent" -- and default to off --
-    # if only m_Floats were consulted. m_Floats wins a collision (it is the
-    # historical home of the property).
-    raw_floats = dict(_flatten(props.get("m_Ints")))
-    raw_floats.update(_flatten(props.get("m_Floats")))
-
-    textures = {}
-    texture_st = {}
-    for name, env in tex_envs.items():
-        if not isinstance(env, dict):
-            continue
-        tex = env.get("m_Texture")
-        if isinstance(tex, dict) and tex.get("guid"):
-            textures[name] = str(tex["guid"]).lower()
-        scale = env.get("m_Scale") or {}
-        offset = env.get("m_Offset") or {}
-        if scale or offset:
-            texture_st[name] = [float(scale.get("x", 1.0)), float(scale.get("y", 1.0)),
-                                float(offset.get("x", 0.0)), float(offset.get("y", 0.0))]
-
-    floats = {}
-    for name, value in raw_floats.items():
-        try:
-            floats[name] = float(value)
-        except (TypeError, ValueError):
-            continue
-
-    colors = {}
-    for name, value in raw_colors.items():
-        if isinstance(value, dict):
-            colors[name] = [float(value.get("r", 0.0)), float(value.get("g", 0.0)),
-                            float(value.get("b", 0.0)), float(value.get("a", 0.0))]
-        elif isinstance(value, (list, tuple)) and len(value) >= 4:
-            colors[name] = [float(v) for v in value[:4]]
-
-    return textures, floats, colors, texture_st
-
-
-# ---------------------------------------------------------------------------
 # Part inference (port of BuildSPInputs.infer_chara_part)
 # ---------------------------------------------------------------------------
 def infer_chara_part(mat_name, textures, floats):
@@ -620,7 +538,13 @@ def build_plan(name, guid, document, texture_exists, face_basis=None):
     (a .mat routinely keeps a stale GUID from a previous shader assignment).
     """
     plan = MaterialPlan(name, guid)
-    textures, floats, colors, texture_st = parse_material(document)
+    # Reading the .mat -- Unity's three property-table serialisations, m_Ints
+    # merged under m_Floats, tiling/offset, active keywords -- is shared with the
+    # Blender add-on (ruri_pybridge.unity.material); only what follows is
+    # EndField_Uber-specific.
+    props = unity_props.parse_material(document)
+    textures, floats, colors, texture_st = (
+        props.textures, props.floats, props.colors, props.texture_st)
     plan.textures, plan.floats, plan.colors, plan.texture_st = \
         textures, floats, colors, texture_st
 
@@ -645,7 +569,7 @@ def build_plan(name, guid, document, texture_exists, face_basis=None):
     # The float property is authoritative (it is what the reference pipeline
     # read, and the port is verified against it); the shader keyword covers a
     # material that only carries the keyword, and any disagreement is reported.
-    active_keywords = _keywords(document)
+    active_keywords = props.keywords
     for shader_name, unity_name in BOOL_MAP.items():
         keyword = _UNIFORM_KEYWORD.get(shader_name)
         keyword_on = keyword in active_keywords if keyword else None

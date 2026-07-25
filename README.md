@@ -90,13 +90,7 @@ and is reported as such; import it through the cabmap bridge instead.
 
 ```
 RuriRipperImporterSubstance/
-  bootstrap.py         private, ABI-keyed pip install of the binary deps
-  pythonnet_bridge.py  CoreCLR claim + RipperBlenderBridge wrappers
-  cabmap_state.py      row table, virtual folder tree, search/sort/selection
-  unity_yaml.py        Unity's serialised-YAML subset
-  mesh_decoder.py      Unity Mesh (class 43) -> numpy
-  hierarchy.py         Transform tree -> world matrices
-  coordinate.py        Unity <-> glTF conversion
+  config.py            this plugin's setting keys (the store itself is shared)
   model_builder.py     renderers -> glTF primitives
   gltf_writer.py       .glb writer
   unity_material.py    .mat -> EndField_Uber uniforms + texture jobs
@@ -105,4 +99,24 @@ RuriRipperImporterSubstance/
   importer.py          end-to-end orchestration
   ui.py                the dock
   shader/              EndField_Uber.glsl + CharCubemap.exr + CharShowLut3D.tga
+  ruri_pybridge/       git submodule -- everything shared with the Blender add-on
+    unity/             YAML subset, class-id table, guid resolution, mesh decode,
+                       renderer discovery, material property reading, LOD/path
+                       rules, clip curves + binding repair, muscle tables
+    runtime/           dependency bootstrap, CoreCLR + RipperHook bridge,
+                       columnar row table, settings store, workspace
+    session/           cabmap browser model, scene-placement model
+    math3d/            Unity -> glTF / Unity -> Blender coordinate spaces
 ```
+
+Clone with the submodule:
+
+```bash
+git clone --recurse-submodules https://github.com/ShiyumeMeguri/RuriRipperImporterSubstance.git
+# already cloned:
+git submodule update --init --recursive
+```
+
+Nothing in `ruri_pybridge` may import `substance_painter` or Qt (it also runs
+inside Blender, which has neither). It carries its own host-free tests:
+`python ruri_pybridge/run_tests.py`.
