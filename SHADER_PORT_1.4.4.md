@@ -49,9 +49,20 @@ _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读�
 - [x] `_ANISOTROPY_SPECULAR_ON` Standard 各向异性高光双瓣
 - [x] `_STYLIZED_FRESNEL` 风格化菲涅尔
 - [x] `_ENEMY_HIT_FLASH` 受击闪白
+- [x] `_MATCAP_ENV_REFLECTION_ON` Matcap 顶替环境采样源
+- [x] `_CUSTOMIZE_AVATAR` 换装染色(BaseMap RGB 当三张遮罩)
+- [x] Emission 呼吸(遮罩 = `_EmissionMap.a` → user2 通道)
+- [x] `_ExtraAlphaMask` 的 Root/Depth 两段染色
+- [x] `_CHARACTER_EROSION` 侵蚀全套(三段色 + pattern + metallic/粗糙度 + RNM 法线)
+- [x] `DITHER_SPHERE` —— 查证为**空功能**:两个属性在全部 3184 份产物里只以
+      cbuffer 声明出现,任何 fragment/vertex 都没读过,记进 IGNORED_KEYWORDS
 
-顺带修掉的既有隐患:`_SRGB_COLOR_PROPS` 只按"名字以 Color 结尾"判断 Color 类型,
-而 `_AnisotropyColorAdditional` 是 Color 类型却不以 Color 结尾 —— 会丢 gamma。
+顺带修掉的既有隐患:
+- `_SRGB_COLOR_PROPS` 只按"名字以 Color 结尾"判断 Color 类型,而
+  `_AnisotropyColorAdditional` 是 Color 类型却不以 Color 结尾 —— 会丢 gamma。
+- 三个新贴图参数误写成 `//: param auto { ... }`,Painter 直接拒绝创建 shader。
+  已修,并加了 `tools/check_shader_params.py` 静态校验(`param auto` 不能带
+  JSON、`sampler2D` 必须有 `usage:texture`),复现即报错。
 
 ## 要实现的清单（片元级,按影响排序）
 
