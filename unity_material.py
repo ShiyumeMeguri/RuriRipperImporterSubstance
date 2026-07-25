@@ -181,6 +181,8 @@ FLOAT_DEFAULTS = {
     "_FaceDecalInvertX": 0.0, "_FaceDecalInvertY": 0.0,
     "_HairBrowMaskThreshold": 0.5,
     "_AlphaClipThreshold": 0.5, "_ViewFade": 0.0,
+    # Part 8 ShadowReceiver -- 参考 characternpr_shadowreceiver.shader 的原值
+    "_CircleFadeDistance": 0.5, "_CircleFadeSmoothness": 0.0,
     "_DissolveEdgeSharp": 1.0, "_DissolveScheduleOffset": 0.0,
     "_DissolveEmissiveEdge": 0.0, "_CutOffPosY": 0.0,
     "_PuppetMaskLocationDown": 0.1, "_PuppetMaskLocationTop": 0.5,
@@ -265,6 +267,7 @@ FLOAT_IDENTITY = [
     "_FaceDecalMirrorMode", "_FaceDecalInvertX", "_FaceDecalInvertY",
     "_HairBrowMaskThreshold",
     "_AlphaClipThreshold", "_ViewFade",
+    "_CircleFadeDistance", "_CircleFadeSmoothness",
     "_DissolveEdgeSharp", "_DissolveScheduleOffset", "_DissolveEmissiveEdge",
     "_CutOffPosY",
     "_PuppetMaskLocationDown", "_PuppetMaskLocationTop", "_PuppetMaskSmooth",
@@ -327,6 +330,7 @@ COLOR_IDENTITY = [
     "_DissolveEmissiveColor", "_CutOffDirection",
     "_HairBaseTintColor", "_HairAddTintColor", "_EyeTintColor",
     "_FaceDecalTintColor",
+    "_ShadowColor", "_CapsuleAoColor",
     "_PuppetBaseColor", "_PuppetPatternTintColor", "_PuppetPatternTintEdgeColor",
     "_PuppetPatternSpeed", "_PuppetPDCurveUVScaleSpeed", "_PuppetPDCurveBaseColor",
     "_PuppetPDCurveLightColor", "_PuppetPDCurveEdgeColor",
@@ -404,6 +408,9 @@ BOOL_MAP = {
     "u_UseEmission":         "_UseEmission",
     "u_ClearCoat":           "_ClearCoat",
     "_PuppetUV2AreaMask":    "_PuppetUV2AreaMask",
+    "_DisableCharacterSelfShadow": "_DisableCharacterSelfShadow",
+    "_DisableSceneShadow":   "_DisableSceneShadow",
+    "_CircleFade":           "_CircleFade",
     "_ParallaxUseNormal":    "_ParallaxUseNormal",
     "_UseDissolve":          "_UseDissolve",
     "_UseCutOff":            "_UseCutOff",
@@ -616,7 +623,7 @@ class MaterialPlan:
 # ---------------------------------------------------------------------------
 # Part inference (port of BuildSPInputs.infer_chara_part)
 # ---------------------------------------------------------------------------
-def infer_chara_part(mat_name, textures, floats):
+def infer_chara_part(mat_name, textures, floats, colors=()):
     n = (mat_name or "").lower()
     # 0) The retarget pipeline (Ruri_Character_Uber) writes an explicit
     #    _CharaPartID -- highest truth, enumerated identically to the GLSL.
@@ -628,7 +635,7 @@ def infer_chara_part(mat_name, textures, floats):
             value = int(pid)
         except (TypeError, ValueError):
             value = None
-        if value is not None and 0 <= value <= 7:
+        if value is not None and 0 <= value <= 8:
             if value == 2 and "_MatcapTex" not in textures and floats.get("_UseMatcap", 0.0) <= 0.5:
                 return 5
             return value
@@ -646,6 +653,13 @@ def infer_chara_part(mat_name, textures, floats):
         return 3
     if "_MaskTex" in textures or "_DisturbTex1" in textures or "_BlendTex" in textures:
         return 6
+
+    # 1b) ShadowReceiver: characternpr_shadowreceiver has no texture slot at all,
+    #    so the only positive evidence is its own property set. _CapsuleAoColor
+    #    and _CircleFadeDistance exist in no other variant, which makes them a
+    #    clean signature -- checked before the "shadow" name rules below.
+    if "shadowreceiver" in n or "_CapsuleAoColor" in colors or "_CircleFadeDistance" in floats:
+        return 8
 
     # 2) OverlayShadow: the name is reliable (checked before the hair/eye name
     #    fallbacks -- "hairshadow" contains "hair"). Leftover floats only count
@@ -727,7 +741,7 @@ def build_plan(name, guid, document, texture_exists, face_basis=None):
             plan.warnings.append("{0}: texture {1} ({2}) is not in the resolved closure".format(
                 name, prop, tex[:8]))
 
-    part = infer_chara_part(name, resolved, floats)
+    part = infer_chara_part(name, resolved, floats, colors)
     plan.part = part
 
     def scalar(prop):

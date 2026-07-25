@@ -64,7 +64,8 @@
     //:     "4 Fur 毛皮": 4,
     //:     "5 Eyebrow 眉毛": 5,
     //:     "6 VFX 特效": 6,
-    //:     "7 OverlayShadow 眼白阴影": 7
+    //:     "7 OverlayShadow 眼白阴影": 7,
+    //:     "8 ShadowReceiver 接影地面片": 8
     //:   },
     //:   "group": "0 部位"
     //: }
@@ -386,6 +387,38 @@
     uniform float f_LiquidProgress;
     //: param custom { "default": 1.0, "label": "[H19] 附着平铺(引擎 CharacterParams10.z)", "min": 0.01, "max": 32.0, "group": "A 液体附着 liquidag" }
     uniform float f_LiquidTiling;
+
+    // ---- Part 8 ShadowReceiver:characternpr_shadowreceiver.shader 的全部 7 个属性 ----
+    // 参考 b3 _582/_617/_1059.._1073。该 pass 是 `Blend Zero SrcColor` 的乘法叠帧,
+    // 与 [H13] OverlayShadow 同一堵墙,输出改写成 (染色, 变暗权重) —— 见 shadeShadowReceiver。
+    //: param custom { "default": [0.5, 0.5, 0.5, 1.0], "label": "阴影色 ShadowColor(A=强度)", "widget":"color", "group": "B ShadowReceiver 接影地面" }
+    uniform vec4 _ShadowColor;
+    //: param custom { "default": false, "label": "关闭高精度自阴影在地上的投射", "group": "B ShadowReceiver 接影地面" }
+    uniform bool _DisableCharacterSelfShadow;
+    //: param custom { "default": false, "label": "关闭主光阴影在地上的投射", "group": "B ShadowReceiver 接影地面" }
+    uniform bool _DisableSceneShadow;
+    //: param custom { "default": false, "label": "Circle Fade(中心点须移至角色脚下)", "group": "B ShadowReceiver 接影地面" }
+    uniform bool _CircleFade;
+    //: param custom { "default": 0.5, "label": "Circle Fade Distance", "min": 0.01, "max": 3.0, "group": "B ShadowReceiver 接影地面" }
+    uniform float _CircleFadeDistance;
+    //: param custom { "default": 0.0, "label": "Circle Fade Smoothness", "min": 0.0, "max": 3.0, "group": "B ShadowReceiver 接影地面" }
+    uniform float _CircleFadeSmoothness;
+    //: param custom { "default": [0.25, 0.25, 0.25, 1.0], "label": "Capsule AO Color", "widget":"color", "group": "B ShadowReceiver 接影地面" }
+    uniform vec4 _CapsuleAoColor;
+    // [H20] 参考这四项来自引擎:主光级联阴影查表、_CharacterShadowmapTex 的 PCF 循环、
+    //       _f_0[34].x 阴影强度、_VisibilitySHRT 屏幕胶囊可见度 SH。Painter 一个都没有,
+    //       换成滑条(1 = 全亮 / 0 = 全遮),取值域与参考一致。
+    //: param custom { "default": 1.0, "label": "[H20] 主光阴影可见度(1=无阴影)", "min": 0.0, "max": 1.0, "group": "B ShadowReceiver 接影地面" }
+    uniform float f_SceneShadow;
+    //: param custom { "default": 1.0, "label": "[H20] 角色自阴影可见度(1=无阴影)", "min": 0.0, "max": 1.0, "group": "B ShadowReceiver 接影地面" }
+    uniform float f_CharacterSelfShadow;
+    //: param custom { "default": 1.0, "label": "[H20] 阴影强度(引擎 f_0[34].x)", "min": 0.0, "max": 1.0, "group": "B ShadowReceiver 接影地面" }
+    uniform float f_ShadowStrength;
+    //: param custom { "default": 0.0, "label": "[H20] 胶囊 AO 遮蔽量", "min": 0.0, "max": 1.0, "group": "B ShadowReceiver 接影地面" }
+    uniform float f_CapsuleAO;
+    // 参考取 unity_ObjectToWorld[3].xyz(投影片自身的原点)。Painter 没有对象矩阵。
+    //: param custom { "default": [0.0, 0.0, 0.0], "label": "[H20] Circle Fade 中心(世界)", "min": -10.0, "max": 10.0, "group": "B ShadowReceiver 接影地面" }
+    uniform vec3 f_CircleFadeCenter;
   //- endregion
 
   //- region CustomizeAvatar 换装染色 (Standard, keyword _CUSTOMIZE_AVATAR)
@@ -3635,6 +3668,47 @@
   }
 //- }
 
+//----------------------------------------------------------------------region Part 8 ShadowReceiver — characternpr_shadowreceiver.shader 逐行移植
+//- {
+  // 参考 Sub0_Pass0_Fragment_b3:
+  //   sChar  = lerp(1, 角色自阴影可见度, 强度)                       _565
+  //   sScene = lerp(1, 主光阴影可见度,   强度)                       _570
+  //   t      = saturate(0.95 - min(lerp(sScene,1,关主光), lerp(sChar,1,关自阴影))) * _ShadowColor.a   _582
+  //   e      = _CircleFadeSmoothness + _CircleFadeDistance           _590
+  //   c      = saturate((|posWS - 片原点| - e) / (_CircleFadeDistance - e))  _610
+  //   t      = _CircleFade ? smoothstep(c) * t : t                   _617
+  //   M      = lerp(lerp(1, _ShadowColor.rgb, t), _CapsuleAoColor.rgb, ao)  _1059.._1073
+  //   帧缓冲 *= M                                    (Blend Zero SrcColor)
+  //
+  // [H13] 同一条改写:SP 只有 over 混合。把乘子 M 精确拆成 (染色 B, 权重 w):
+  //   w = 1 - min3(M),  B = (M - min3(M)) / w    ⇒  lerp(1, B, w) ≡ M(代数恒等,不是近似)
+  // over 出来的 fb*(1-w) + B*w 在 fb=1(白地面)时与真乘完全相等,M=1 时 w=0 全透。
+  float3 shadeShadowReceiver(float3 positionWS, out float outAlpha) {
+      float sChar  = mad(f_ShadowStrength, f_CharacterSelfShadow - 1.0, 1.0);   // _565
+      float sScene = mad(f_ShadowStrength, f_SceneShadow - 1.0, 1.0);           // _570
+      float t = clamp(0.95 - min(mad(_DisableSceneShadow ? 1.0 : 0.0, 1.0 - sScene, sScene),
+                                 mad(_DisableCharacterSelfShadow ? 1.0 : 0.0, 1.0 - sChar, sChar)),
+                      0.0, 1.0) * _ShadowColor.a;                               // _582
+
+      float edge = _CircleFadeSmoothness + _CircleFadeDistance;                 // _590
+      float3 toCenter = positionWS - f_CircleFadeCenter;                        // _603
+      float c = clamp((1.0 / (_CircleFadeDistance - edge)) * (length(toCenter) - edge),
+                      0.0, 1.0);                                                // _610
+      t = _CircleFade ? (((c * c) * mad(c, -2.0, 3.0)) * t) : t;                // _617
+
+      float3 shadowMul = float3(mad(t, _ShadowColor.r - 1.0, 1.0),
+                                mad(t, _ShadowColor.g - 1.0, 1.0),
+                                mad(t, _ShadowColor.b - 1.0, 1.0));            // _1059.._1061
+      float ao = clamp(f_CapsuleAO, 0.0, 1.0);                                  // _1073
+      float3 mul = lerp(shadowMul, _CapsuleAoColor.rgb, ao);
+
+      float lo = min(min(mul.r, mul.g), mul.b);
+      float w = 1.0 - lo;
+      outAlpha = clamp(w, 0.0, 1.0);
+      return (w > 1e-5) ? ((mul - float3(lo)) / w) : float3(0.0);
+  }
+//- }
+
 //----------------------------------------------------------------------region EndField 后处理 Tonemap (HGRP ACES_modified 1:1)
 //- {
   // 源: HG lutbuilder2d Sub0_Pass0_Fragment_b4.hlsl L141-166, 经 AzureNihil
@@ -3724,6 +3798,7 @@
       float outAlpha = 1.0;
       bool skipDefaultClip = false;
       bool forceAlphaBlend = false; // 部位本身就是半透明(如 OverlayShadow 乘法叠帧), 无视 u_AlphaBlend
+      bool skipTonemap = false;     // 输出是乘子而非光照色的 pass 不过后处理
 
       if (u_CharaPart == 1) {
           // ---- Face: Emotion 混合在进光照前完成 (HGRP Skin frag L687-702) ----
@@ -3785,6 +3860,13 @@
           forceAlphaBlend = true;
           skipDefaultClip = true;
       }
+      else if (u_CharaPart == 8) {
+          // ---- ShadowReceiver (接影地面片; 同 [H13] 的乘法叠帧改写) ----
+          color = shadeShadowReceiver(inputs.position, outAlpha);
+          forceAlphaBlend = true;
+          skipDefaultClip = true;
+          skipTonemap = true; // 参考这个 pass 吐的是乘子, 不是被后处理的光照色
+      }
       else {
           // ---- Standard (默认 / Part 0) ----
           float3 albedo = baseCol * _BaseColor.rgb;
@@ -3823,7 +3905,7 @@
       }
 
       // ---- EndField 后处理 tonemap (HGRP ACES_modified; 屏幕链对所有 part 一致) ----
-      color = ApplyEndfieldTonemap(color);
+      if (!skipTonemap) color = ApplyEndfieldTonemap(color);
 
       diffuseShadingOutput(color);
   }
