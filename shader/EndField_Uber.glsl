@@ -161,17 +161,46 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
-  //- region Pantyhose (Standard)
-    //: param custom { "default": false, "label": "启用连裤袜 _PANTYHOSE", "group": "7 Pantyhose" }
-    uniform bool u_Pantyhose;
-    //: param custom { "default": [0.36, 0.17, 0.16, 0.5], "label": "Pantyhose 颜色", "widget":"color", "group": "7 Pantyhose" }
-    uniform vec4 _PantyhoseColor;
-    //: param custom { "default": 0.0, "label": "Pantyhose 高光强度", "min": 0.0, "max": 0.5, "group": "7 Pantyhose" }
-    uniform float _PantyhoseSpecularInt;
-    //: param custom { "default": 0.0, "label": "Pantyhose 高光偏移", "min": -2.0, "max": 2.0, "group": "7 Pantyhose" }
-    uniform float _PantyhoseSpecularValue;
-    //: param custom { "default": 0.0, "label": "Pantyhose 各向异性", "min": -1.0, "max": 1.0, "group": "7 Pantyhose" }
-    uniform float _PantyhoseAnisotropyDirection;
+  //- region SilkStockings 丝袜 (Standard, keyword _SILK_STOCKINGS)
+    // 1.4.4 的 _SilkStockings* 全套。1.3.3 的 _Pantyhose* 在参考里已 0 命中,
+    // 整块被这套取代:多了干/湿偏色、覆盖 remap、遮罩贴图(R 各向异性强度 /
+    // G 锐利度 / B 湿身光滑度 / A 透肉度)、高光干燥态最小值与透肉衰减、
+    // 雨湿遮罩影响、以及"浸润时透肉 or 压暗"的二选一。
+    //: param custom { "default": false, "label": "启用丝袜 _SILK_STOCKINGS", "group": "7 SilkStockings 丝袜" }
+    uniform bool u_SilkStockings;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "常态偏色 DryColor", "widget":"color", "group": "7 SilkStockings 丝袜" }
+    uniform vec4 _SilkStockingsDryColor;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "湿润偏色 WetColor", "widget":"color", "group": "7 SilkStockings 丝袜" }
+    uniform vec4 _SilkStockingsWetColor;
+    //: param custom { "default": [0.0, 0.0, 0.0, 1.0], "label": "边缘颜色 Color (a=透肉阈值)", "widget":"color", "group": "7 SilkStockings 丝袜" }
+    uniform vec4 _SilkStockingsColor;
+    //: param custom { "default": 0.05, "label": "最浅覆盖 MinAffect", "min": 0.0, "max": 0.49, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsMinAffect;
+    //: param custom { "default": 0.9, "label": "最深覆盖 MaxAffect", "min": 0.5, "max": 0.9, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsMaxAffect;
+    //: param custom { "default": 5.0, "label": "高光强度Remap SpecularInt", "min": 0.0, "max": 20.0, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsSpecularInt;
+    //: param custom { "default": 0.0, "label": "高光干燥态最小值 SpecularMinAtMinWetness", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsSpecularMinAtMinWetness;
+    //: param custom { "default": 0.8, "label": "高光透肉衰减 SpecularFalloff", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsSpecularFalloff;
+    //: param custom { "default": 2.0, "label": "高光位置偏移 SpecularValue", "min": -2.0, "max": 2.0, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsSpecularValue;
+    //: param custom { "default": 0.0, "label": "锐利度G AnisoDirection (简易模式)", "min": -1.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsAnisoDirection;
+    //: param custom { "default": false, "label": "高级模式(使用遮罩贴图) Advance", "group": "7 SilkStockings 丝袜" }
+    uniform bool _SilkStockingsAdvance;
+    //: param custom { "default": 0.7, "label": "浸润内置遮罩影响 RainWetMaskScale", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsRainWetMaskScale;
+    //: param custom { "default": 0.5, "label": "浸润时 透肉(>0) or 压暗(<0) AlbedoAffectType", "min": -0.9, "max": 0.5, "group": "7 SilkStockings 丝袜" }
+    uniform float _SilkStockingsAlbedoAffectType;
+    //: param auto { "default": "", "label": "丝袜遮罩 R各向异性强度 G锐利度 B湿身光滑度 A透肉度" }
+    uniform sampler2D _SilkStockingsMask;
+    // [H14] 湿润度:游戏里来自天气/雨系统(_563 = max(角色浸润, 雨量/255)),
+    // Painter 没有 → 一根滑条替代。参考里驱动"湿身遮罩"的光照项 (_1589) 与
+    // 它只通过 max/smoothstep 合流,故同源。
+    //: param custom { "default": 0.0, "label": "[H14] 湿润度 Wetness", "min": 0.0, "max": 1.0, "group": "7 SilkStockings 丝袜" }
+    uniform float f_SilkWetness;
   //- endregion
 
   //- region Parallax (Standard)
@@ -810,7 +839,7 @@
 
 //----------------------------------------------------------------------region Part 0 Standard — HGRP_CharacterNPR_Fix.shader computeNPRLighting 逐行移植
 //- {
-  // 与旧版 EndField_Uber 相同的逐行移植, 差异: ShadowLUT/SpecRamp/ClearCoat/Pantyhose/Parallax
+  // 与旧版 EndField_Uber 相同的逐行移植, 差异: ShadowLUT/SpecRamp/ClearCoat/SilkStockings/Parallax
   // 由 #ifdef 改为运行时 bool (数学逐位一致); 变量按 GLSL 作用域规则做了无副作用的提升声明。
   float3 shadeStandard(V2F inputs, float3 positionWS, float3 normalWS_raw, float4 tangentWS, float faceSign, float3 albedo, float baseAlpha, out float3 shadowColorOut) {
       float2 uv = GetBaseUV(inputs);
@@ -826,6 +855,40 @@
       float metallic, specScale, shadowMask, smoothness;
       SampleRMOS(inputs, metallic, specScale, shadowMask, smoothness);
       float roughnessRaw = 1.0 - smoothness;
+
+      // ---- SilkStockings 状态 (_SILK_STOCKINGS) ----
+      // 参考: Sub0_Pass0_Fragment_b587 (ON) vs b503 (OFF), 逐条对应
+      //   _563  湿润度 -> f_SilkWetness [H14]
+      //   _949  高光强度 = lerp(MinAtMinWetness, 1, wet) * SpecularInt
+      //   _1267 各向异性方向  _1268 高光强度  _1269 粗糙度  _1270 透肉覆盖
+      float silk_anisoDir = 0.0;
+      float silk_specInt = 0.0;
+      float silk_coverage = 0.0;
+      float3 silk_tint = float3(1.0);
+      if (u_SilkStockings) {
+          float wet = clamp(f_SilkWetness, 0.0, 1.0);
+          float alphaProduct = baseAlpha * _BaseColor.a;              // _351
+          float specIntBase = mad(wet, 1.0 - _SilkStockingsSpecularMinAtMinWetness,
+                                  _SilkStockingsSpecularMinAtMinWetness)
+                              * _SilkStockingsSpecularInt;            // _949
+          if (_SilkStockingsAdvance) {
+              // R 各向异性强度 / G 锐利度 / B 湿身光滑度 / A 透肉度
+              float4 sm = texture(_SilkStockingsMask, uv);            // _1105
+              silk_anisoDir = clamp(mad(sm.y, 2.0, -1.0), -0.95, 0.95);
+              silk_specInt = specIntBase * sm.x;
+              roughnessRaw = mad(wet, (smoothness - 1.0) + (1.0 - sm.z), roughnessRaw);
+              silk_coverage = clamp(mad(wet, mad(-baseAlpha, _BaseColor.a, sm.w), alphaProduct)
+                                    + 1.0 - _SilkStockingsColor.a, 0.0, 1.0);
+          } else {
+              silk_anisoDir = -mad(clamp(alphaProduct * 0.5, 0.0, 1.0),
+                                   0.5 - _SilkStockingsAnisoDirection,
+                                   _SilkStockingsAnisoDirection);
+              silk_specInt = specIntBase;
+              silk_coverage = clamp(mad(baseAlpha, _BaseColor.a, 1.0)
+                                    - _SilkStockingsColor.a, 0.0, 1.0);
+          }
+          silk_tint = lerp(_SilkStockingsDryColor.rgb, _SilkStockingsWetColor.rgb, wet);
+      }
 
       // ---- Shadow color ----
       float3 shadowColor;
@@ -855,17 +918,37 @@
           ccActive = ccMask > 0.001;
       }
 
-      // ---- Pantyhose Fresnel color blend ----
-      float ph_alphaProduct = 0.0;
-      float ph_mask = 0.0;
-      if (u_Pantyhose) {
-          ph_alphaProduct = baseAlpha * _BaseColor.a;
-          ph_mask = (ph_alphaProduct < 0.99) ? 1.0 : 0.0;
-          float ph_NdotV = saturate(dot(V, N));
-          float ph_exp = ph_alphaProduct + 1.0 - _PantyhoseColor.a;
-          float ph_blend = ph_mask * min(exp2(log2(1.05 - ph_NdotV) * (ph_exp * 2.0)), 0.9);
-          albedo = lerp(albedo, _PantyhoseColor.rgb, ph_blend);
-          shadowColor = lerp(shadowColor, _PantyhoseColor.rgb, ph_blend);
+      // ---- SilkStockings 反照率 (_1285.._1335) ----
+      // affect = lerp(MinAffect, MaxAffect, min(pow(1.05 - NdotV, 2*coverage), 1))
+      // albedo = lerp(albedo * tint, Color.rgb, affect)   —— 越透肉指数越高,
+      // 边缘色越集中在掠射角,就是丝袜边缘那圈。两份反照率(本体/阴影)同样处理。
+      if (u_SilkStockings) {
+          float3 albedo0 = albedo;              // _348.._350 未经丝袜处理的原反照率
+          float3 shadowColor0 = shadowColor;    // _370.._372 同上,阴影侧那一份
+          float silk_NdotV = clamp(dot(N, V), 0.0, 1.0);                       // _1290
+          float silk_affect = mad(min(exp2(log2(1.05 - silk_NdotV) * (silk_coverage + silk_coverage)), 1.0),
+                                  _SilkStockingsMaxAffect - _SilkStockingsMinAffect,
+                                  _SilkStockingsMinAffect);                    // _1305
+          float3 silkAlbedo = lerp(albedo0 * silk_tint, _SilkStockingsColor.rgb, silk_affect);       // _1321.._1323
+          float3 silkShadow = lerp(shadowColor0 * silk_tint, _SilkStockingsColor.rgb, silk_affect);  // _1333.._1335
+
+          // 浸润时的反照率处理:AlbedoAffectType > 0 透肉(整体压向 0),
+          // <= 0 压暗(按同一权重混回原反照率)。参考:
+          //   _2588 = _2537 ? (_2536 * _1321) : mad(_2536, _1321 - albedo, albedo)
+          // [H14] 参考里 _1589(光照湿身项)/_529(雨量)/_561(角色浸润) 三者都没有,
+          // 三处同源代入 f_SilkWetness,阈值与斜率保持参考原值不动。
+          float wet = clamp(f_SilkWetness, 0.0, 1.0);
+          float t1 = clamp(((wet - 0.8) + clamp(wet * _SilkStockingsRainWetMaskScale, 0.0, 1.0)) * 3.3333333, 0.0, 1.0);  // _2517
+          float t2 = clamp(((wet - 0.45) + min(wet, 1.0)) * 1.5384614, 0.0, 1.0);                                        // _2526
+          float wetSmooth = max((t2 * t2) * mad(t2, -2.0, 3.0), (t1 * t1) * mad(t1, -2.0, 3.0));
+          float albedoAffect = mad(wetSmooth, -abs(_SilkStockingsAlbedoAffectType), 1.0);  // _2536
+          if (_SilkStockingsAlbedoAffectType > 0.0) {
+              albedo = albedoAffect * silkAlbedo;
+              shadowColor = albedoAffect * silkShadow;
+          } else {
+              albedo = lerp(albedo0, silkAlbedo, albedoAffect);
+              shadowColor = lerp(shadowColor0, silkShadow, albedoAffect);
+          }
       }
       shadowColorOut = shadowColor;
 
@@ -1047,26 +1130,32 @@
       float denomSq = denom * denom;
       float D_raw = (denomSq != roughSq) ? roughSq / denomSq : 1.0;
 
-      float D_combined = D_raw;
-      if (u_Pantyhose) {
-          float3 ph_rawTan = tangentWS.xyz;
-          float3 ph_T = normalize(ph_rawTan - N * dot(ph_rawTan, N));
-          float3 ph_B = cross(N, ph_T) * tangentWS.w;
-          float3 ph_H = normalize(H + V * _PantyhoseSpecularValue);
-          float ph_aniso = saturate(ph_alphaProduct * 0.5) * (0.5 - _PantyhoseAnisotropyDirection) + _PantyhoseAnisotropyDirection;
-          float ph_rT = roughness * (ph_aniso + 1.0);
-          float ph_rB = (1.0 - ph_aniso) * roughness;
-          float ph_rTB = ph_rT * ph_rB;
-          float ph_tH = ph_rB * dot(ph_T, ph_H);
-          float ph_bH = dot(ph_B, ph_H) * ph_rT;
-          float ph_nH = dot(N, ph_H) * ph_rTB;
-          float ph_d = ph_tH * ph_tH + ph_bH * ph_bH + ph_nH * ph_nH;
-          float ph_rTB3 = ph_rTB * ph_rTB * ph_rTB;
-          float ph_d2 = ph_d * ph_d;
-          float ph_ndf = (ph_d2 != ph_rTB3) ? (ph_rTB3 / ph_d2) : 1.0;
-          D_combined = D_raw + ph_ndf * _PantyhoseSpecularInt * ph_mask;
+      // 各向同性 GGX:可见项只作用在它身上(参考 _3551)。
+      float ggxTerm = clamp(D_raw * 0.5 / (NdotV_spec * 2.0 + roughness + 1e-4) - NEAR_ZERO_Y, 0.0, 20.0);
+
+      // ---- SilkStockings 各向异性高光 (_3025.._3557) ----
+      // alphaT/alphaB 由 alpha(=roughness²) 按方向劈开,劈的幅度再乘透肉衰减;
+      // 半角向量沿视线偏移 SpecularValue;这一瓣**不过**上面的可见项,而是
+      // 单独 clamp 后与之相加(参考 _3572 = specColor * (_3551 + _3557)),
+      // 与 1.3.3 把两瓣一起送进可见项的写法不同。
+      if (u_SilkStockings) {
+          float silk_falloff = 1.0 - clamp(silk_coverage * _SilkStockingsSpecularFalloff, 0.0, 1.0);  // _3025
+          float silk_alphaT = roughness * mad(-silk_anisoDir, silk_falloff, 1.0);   // _3028
+          float silk_alphaB = roughness * mad( silk_anisoDir, silk_falloff, 1.0);   // _3030
+          float silk_alphaTB = silk_alphaB * silk_alphaT;                           // _3516
+          float3 silk_rawTan = tangentWS.xyz;
+          float3 silk_T = normalize(silk_rawTan - N * dot(silk_rawTan, N));
+          float3 silk_B = cross(N, silk_T) * tangentWS.w;
+          float3 silk_H = normalize(H + V * _SilkStockingsSpecularValue);           // _3518
+          float3 silk_v = float3(silk_alphaB * dot(silk_T, silk_H),
+                                 silk_alphaT * dot(silk_B, silk_H),
+                                 silk_alphaTB * dot(N, silk_H));                    // _3538
+          float silk_d = dot(silk_v, silk_v);                                       // _3539
+          float silk_num = silk_alphaTB * (silk_alphaTB * silk_alphaTB);            // _3541
+          float silk_den = silk_d * silk_d;                                         // _3542
+          float silk_ndf = (silk_den != silk_num) ? clamp(silk_num / silk_den, 0.0, 20.0) : 1.0;
+          ggxTerm += silk_ndf * silk_specInt;                                       // _3557
       }
-      float ggxTerm = clamp(D_combined * 0.5 / (NdotV_spec * 2.0 + roughness + 1e-4) - NEAR_ZERO_Y, 0.0, 20.0);
 
       // ---- Spec Ramp ----
       float3 specRampColor = specColor;
