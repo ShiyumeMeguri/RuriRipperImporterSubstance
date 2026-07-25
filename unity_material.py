@@ -166,6 +166,10 @@ FLOAT_DEFAULTS = {
     "_SpecBumpScale": 1.0,
     # characternpr (Standard) 的 _ANISOTROPY_SPECULAR_ON 一套 —— 与下面 hair
     # 的 _AnisotropyValue/_AnisotropyDirX 是两个不同 shader 的不同功能。
+    # 参考默认 2 = Unity Cull Back = 只画正面。
+    "_Cull": 2.0,
+    "_DitherSphereRadius": 0.0, "_DitherSphereSmoothness": 0.1,
+    "_DisableRainEffectOnMaterial": 0.0,
     "_VFXMainUVSet": 0.0, "_VFXScreenUVUseDepth": 0.0, "_VFXFresnelUseNormalMap": 0.0,
     "_FaceDecalSize": 0.2, "_FaceDecalBrightnessMask": 0.7,
     "_FaceDecalMirrorSplit": 0.5, "_FaceDecalCenterX": 0.0, "_FaceDecalCenterY": 0.0,
@@ -248,6 +252,8 @@ FLOAT_IDENTITY = [
     "_SkinRimOffScale", "_FaceRimOffScale", "_EmotionBlend",
     "_MatcapNormalScale", "_SpecBumpScale",
     "_ParallaxMarchNum", "_ParallaxScale",
+    "_Cull", "_DitherSphereRadius", "_DitherSphereSmoothness",
+    "_DisableRainEffectOnMaterial",
     "_VFXMainUVSet", "_VFXScreenUVUseDepth", "_VFXFresnelUseNormalMap",
     "_FaceDecalSize", "_FaceDecalBrightnessMask", "_FaceDecalMirrorSplit",
     "_FaceDecalCenterX", "_FaceDecalCenterY", "_FaceDecalRotation",
@@ -443,6 +449,7 @@ BOOL_MAP = {
 # Every name here is one EndField_Uber.glsl itself documents in its own
 # parameter labels -- not inferred from the data.
 KEYWORD_MAP = {
+    "DITHER_SPHERE":          "u_DitherSphere",
     "_NORMALMAP":             "u_UseBumpMap",
     "_METALLICSPECGLOSSMAP":  "u_UseMetallicGlossMap",
     "_DIFF_RAMP_ON":          "u_UseDiffRamp",
@@ -490,9 +497,6 @@ IGNORED_KEYWORDS = {
     "_OUTLINE_MASK": "Painter has no outline pass",
     "_USE_ALCHEMY_AO": "engine AO variant; [H5] skips the sandbox custom AO",
     "_USE_GROUND_TRUTH_AO": "engine AO variant; [H5] skips the sandbox custom AO",
-    "DITHER_SPHERE": ("_DitherSphereRadius/_DitherSphereSmoothness appear ONLY as cbuffer "
-                      "declarations across all 3184 reference dumps -- never read by any "
-                      "fragment (nor any vertex) shader, so there is nothing to port"),
     "_ALPHA_SCENE_DEPTH_FADE": "reads _CameraDepthTexture (scene depth); Painter has no "
                                "scene depth at all -- the same wall [H11] already "
                                "documents for hair's depth-edge mask",

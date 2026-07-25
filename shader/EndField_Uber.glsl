@@ -161,6 +161,29 @@
     // ViewFade:掠射角按 |dot(N,V)| 淡出 alpha(参考 _1811/_1816/_1824)。
     //: param custom { "default": 0.0, "label": "视角淡出 ViewFade", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
     uniform float _ViewFade;
+    // _Cull 在参考里是 pass 的渲染状态(`Cull [_Cull]`),没有任何 fragment 读它。
+    // Painter 的渲染状态不归 shader 管 —— 但同样的**可见结果**在片元里做得到:
+    // 按 uniform_facing 丢掉该剔除的那一面。0=Both 1=Back 2=Front,与参考枚举同序。
+    //: param custom { "default": 2.0, "label": "剔除面 Cull (0 双面 / 1 背面 / 2 正面)", "min": 0.0, "max": 2.0, "group": "5 渲染设置" }
+    uniform float _Cull;
+    // DITHER_SPHERE:朝向"焦点方向"的部分按半径/羽化抖动剔除(镜头贴近时
+    // 让挡住脸的头发/身体消失)。参考 Sub0_Pass0_Fragment_b1345 的 _2604/_2631。
+    //: param custom { "default": false, "label": "球形抖动剔除 DITHER_SPHERE", "group": "5 渲染设置" }
+    uniform bool u_DitherSphere;
+    //: param custom { "default": 0.0, "label": "抖动球半径 DitherSphereRadius", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
+    uniform float _DitherSphereRadius;
+    //: param custom { "default": 0.1, "label": "抖动球羽化 DitherSphereSmoothness", "min": 0.001, "max": 1.0, "group": "5 渲染设置" }
+    uniform float _DitherSphereSmoothness;
+    // [H18] 焦点位置在游戏里是 _VFXParams0.xyz(角色位置),抖动量来自引擎逐物体
+    //       常量;Painter 都没有 → 焦点做成可填坐标,抖动量做成滑条(1=全不透明)。
+    //: param custom { "default": [0.0, 0.0, 0.0, 0.0], "label": "[H18] 抖动球焦点位置", "group": "5 渲染设置" }
+    uniform vec4 f_DitherSphereFocus;
+    //: param custom { "default": 1.0, "label": "[H18] 抖动量 (1=不剔除)", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
+    uniform float f_DitherAmount;
+    // 参考 _DisableRainEffectOnMaterial:材质级"不受雨"开关,门控整条浸润链路
+    // (Painter 里唯一的浸润消费者就是丝袜的 f_SilkWetness [H14])。
+    //: param custom { "default": 0.0, "label": "关闭材质受雨 DisableRainEffectOnMaterial", "min": 0.0, "max": 1.0, "group": "5 渲染设置" }
+    uniform float _DisableRainEffectOnMaterial;
     // 视差用哪条法线建 TBN:开=法线贴图后的 N,关=几何法线(参考 _932/_936)。
     //: param custom { "default": false, "label": "视差使用法线贴图 ParallaxUseNormal", "group": "5 渲染设置" }
     uniform bool _ParallaxUseNormal;
@@ -1219,7 +1242,9 @@
       float silk_coverage = 0.0;
       float3 silk_tint = float3(1.0);
       if (u_SilkStockings) {
-          float wet = clamp(f_SilkWetness, 0.0, 1.0);
+          // _DisableRainEffectOnMaterial 门控整条浸润链路(参考 _775 的判定)
+          float wet = (_DisableRainEffectOnMaterial > 0.99) ? 0.0
+                    : clamp(f_SilkWetness, 0.0, 1.0);
           float alphaProduct = baseAlpha * _BaseColor.a;              // _351
           float specIntBase = mad(wet, 1.0 - _SilkStockingsSpecularMinAtMinWetness,
                                   _SilkStockingsSpecularMinAtMinWetness)
@@ -1496,7 +1521,8 @@
           //   _2588 = _2537 ? (_2536 * _1321) : mad(_2536, _1321 - albedo, albedo)
           // [H14] 参考里 _1589(光照湿身项)/_529(雨量)/_561(角色浸润) 三者都没有,
           // 三处同源代入 f_SilkWetness,阈值与斜率保持参考原值不动。
-          float wet = clamp(f_SilkWetness, 0.0, 1.0);
+          float wet = (_DisableRainEffectOnMaterial > 0.99) ? 0.0
+                    : clamp(f_SilkWetness, 0.0, 1.0);
           float t1 = clamp(((wet - 0.8) + clamp(wet * _SilkStockingsRainWetMaskScale, 0.0, 1.0)) * 3.3333333, 0.0, 1.0);  // _2517
           float t2 = clamp(((wet - 0.45) + min(wet, 1.0)) * 1.5384614, 0.0, 1.0);                                        // _2526
           float wetSmooth = max((t2 * t2) * mad(t2, -2.0, 3.0), (t1 * t1) * mad(t1, -2.0, 3.0));
@@ -3607,6 +3633,32 @@
 
       // ---- 朝向 / TBN 手性 ----
       bool isFrontFace = (uniform_facing >= 0);
+      // _Cull:参考里是 `Cull [_Cull]` 的 pass 状态,Painter 管不到渲染状态,
+      // 但同一个可见结果在片元里做得到。值就是 Unity 的 Cull 枚举
+      // (0=Off 1=Front 2=Back),inspector 上那三个标签说的是**渲染哪一面**,
+      // 所以默认 2 = Cull Back = 只画正面。
+      if ((_Cull > 0.5 && _Cull < 1.5 && isFrontFace)        // Cull Front
+          || (_Cull >= 1.5 && !isFrontFace)) {               // Cull Back
+          discard;
+      }
+
+      // DITHER_SPHERE:参考 _2581.._2631
+      //   toFocus = normalize(camera - focus - (0,1,0))
+      //   t       = saturate((1 - saturate(dot(N, toFocus)) - Radius) / Smoothness)
+      //   a       = lerp(smoothstep(t), 1, ditherAmount)   [H18]
+      //   a < 0.99 -> discard
+      if (u_DitherSphere) {
+          float3 dsFocus = f_DitherSphereFocus.xyz;
+          float3 dsDir = normalize(float3(camera_pos.x - dsFocus.x,
+                                          (camera_pos.y - dsFocus.y) - 1.0,
+                                          camera_pos.z - dsFocus.z));           // _2585
+          float dsT = clamp((1.0 - clamp(dot(normalize(inputs.normal), dsDir), 0.0, 1.0)
+                             - _DitherSphereRadius) / max(_DitherSphereSmoothness, 1e-5),
+                            0.0, 1.0);                                          // _2604
+          float dsSmooth = (dsT * dsT) * mad(dsT, -2.0, 3.0);
+          float dsAlpha = mad(1.0 - f_DitherAmount, 1.0 - dsSmooth, dsSmooth);  // _2631
+          if (dsAlpha < 0.99) discard;
+      }
       float faceSign = isFrontFace ? 1.0 : (_BackFaceNormalFlip * 2.0 - 1.0);
       float tSign = (dot(cross(normalize(inputs.normal), normalize(inputs.tangent)), normalize(inputs.bitangent)) < 0.0) ? -1.0 : 1.0;
       float4 tangentWS = float4(inputs.tangent, tSign);
