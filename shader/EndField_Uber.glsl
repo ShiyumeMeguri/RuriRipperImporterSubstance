@@ -178,6 +178,21 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region ExtraAlphaMask 额外遮罩 (Standard, 无 keyword)
+    // 参考里没有开关属性:材质挂了图就采。R=Alpha G=Root B=Depth A=ID,
+    // 反照率被 Root/Depth 两段 tint 各乘一次(参考 _391.._393)。
+    // [H12] 参考在 UV1 上采(TEXCOORD_4),Painter 这套着色只有 UV0 → 退回 uv0,
+    //       与 VFX 部位 uv1=uv0 是同一条既有约定。
+    //: param custom { "default": false, "label": "启用额外遮罩(挂图自动开)", "group": "A ExtraAlphaMask 额外遮罩" }
+    uniform bool u_ExtraAlphaMask;
+    //: param custom { "default": "", "default_color": [1.0,1.0,1.0,1.0], "label": "额外遮罩 R:Alpha G:Root B:Depth A:ID", "usage": "texture", "group": "A ExtraAlphaMask 额外遮罩" }
+    uniform sampler2D _ExtraAlphaMask;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "Root Tint Color", "widget":"color", "group": "A ExtraAlphaMask 额外遮罩" }
+    uniform vec4 _ExtraRootTintColor;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "Depth Tint Color", "widget":"color", "group": "A ExtraAlphaMask 额外遮罩" }
+    uniform vec4 _ExtraDepthTintColor;
+  //- endregion
+
   //- region CustomizeAvatar 换装染色 (Standard, keyword _CUSTOMIZE_AVATAR)
     // BaseMap 的 RGB 在这条路径下不是颜色而是三张遮罩:
     //   R = 明度  G = 选哪种 tint  B = 用 BaseColor 还是 tint
@@ -246,7 +261,7 @@
     uniform float _StylizedNoiseContrast;
     //: param custom { "default": [1.0, 1.0, 0.0, 0.0], "label": "噪声图 ST (xy=Tiling zw=Offset)", "group": "8 StylizedFresnel 风格化菲涅尔" }
     uniform vec4 _StylizedFresnelNoiseMap_ST;
-    //: param auto { "default": "", "label": "风格化菲涅尔噪声图" }
+    //: param custom { "default": "", "default_color": [1.0,1.0,1.0,1.0], "label": "风格化菲涅尔噪声图", "usage": "texture", "group": "8 StylizedFresnel 风格化菲涅尔" }
     uniform sampler2D _StylizedFresnelNoiseMap;
   //- endregion
 
@@ -302,7 +317,7 @@
     uniform float _SilkStockingsRainWetMaskScale;
     //: param custom { "default": 0.5, "label": "浸润时 透肉(>0) or 压暗(<0) AlbedoAffectType", "min": -0.9, "max": 0.5, "group": "7 SilkStockings 丝袜" }
     uniform float _SilkStockingsAlbedoAffectType;
-    //: param auto { "default": "", "label": "丝袜遮罩 R各向异性强度 G锐利度 B湿身光滑度 A透肉度" }
+    //: param custom { "default": "", "default_color": [1.0,1.0,1.0,1.0], "label": "丝袜遮罩 R各向异性强度 G锐利度 B湿身光滑度 A透肉度", "usage": "texture", "group": "7 SilkStockings 丝袜" }
     uniform sampler2D _SilkStockingsMask;
     // [H14] 湿润度:游戏里来自天气/雨系统(_563 = max(角色浸润, 雨量/255)),
     // Painter 没有 → 一根滑条替代。参考里驱动"湿身遮罩"的光照项 (_1589) 与
@@ -970,6 +985,14 @@
       float metallic, specScale, shadowMask, smoothness;
       SampleRMOS(inputs, metallic, specScale, shadowMask, smoothness);
       float roughnessRaw = 1.0 - smoothness;
+
+      // ---- ExtraAlphaMask 的 Root/Depth 染色 (参考 _391.._393) ----
+      // albedo *= lerp(RootTint, 1, mask.g) * lerp(DepthTint, 1, mask.b)
+      if (u_ExtraAlphaMask) {
+          float4 extraMask = texture(_ExtraAlphaMask, uv);                     // _349
+          albedo *= mad(float3(extraMask.g), 1.0 - _ExtraRootTintColor.rgb, _ExtraRootTintColor.rgb)
+                  * mad(float3(extraMask.b), 1.0 - _ExtraDepthTintColor.rgb, _ExtraDepthTintColor.rgb);
+      }
 
       // ---- CustomizeAvatar 换装染色 (_CUSTOMIZE_AVATAR) ----
       // 参考 Sub0_Pass0_Fragment_b683 的 _362.._379:BaseMap 的 RGB 当遮罩用,

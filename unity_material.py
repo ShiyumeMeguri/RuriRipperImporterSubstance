@@ -106,6 +106,8 @@ TEXTURE_PARAMS = {
     # 都是数据,Painter 会对 RGB 强制色彩管理,所以走 sampler 而不是引擎通道。
     "_SilkStockingsMask":  ("_SilkStockingsMask",  OP_COPY_RGBA),
     "_StylizedFresnelNoiseMap": ("_StylizedFresnelNoiseMap", OP_COPY_RGBA),
+    # UV1 的 Alpha(R)/Root(G)/Depth(B)/ID(A) —— 四通道全是数据。
+    "_ExtraAlphaMask":     ("_ExtraAlphaMask",     OP_COPY_RGBA),
     "_StrokeMap":          ("_StrokeMap",          OP_COPY_RGBA),
     "_LineMap":            ("_LineMap",            OP_COPY_RGBA),
     "_FurMap":             ("_FurMap",             OP_COPY_RGBA),
@@ -118,6 +120,12 @@ TEXTURE_PARAMS = {
     "_BlendTex":           ("_VFXBlendTex",        OP_COPY_RGBA),
     "_DisturbTex1":        ("_VFXDisturbTex",      OP_COPY_RGBA),
     "_NormalMap":          ("_VFXNormalMap",       OP_COPY_RGBA),
+}
+
+# Reference features with no toggle property: the shader samples the map
+# whenever the material binds one, so the GLSL bool is derived from presence.
+TEXTURE_PRESENCE_BOOLS = {
+    "_ExtraAlphaMask": "u_ExtraAlphaMask",
 }
 
 # Unity properties that carry no consumer on the Painter side at all.
@@ -251,6 +259,7 @@ COLOR_IDENTITY = [
     "_MatcapColor", "_EyeHighLightColor", "_EyeScatteringColor",
     "_AnisotropyColor2", "_AnisotropyColorAdditional", "_StylizedFresnelColor",
     "_CustomizeBaseColor", "_CustomizeBaseTintColor", "_CustomizeAddTintColor",
+    "_ExtraRootTintColor", "_ExtraDepthTintColor",
     "_BaseMapUVSpeed", "_EmissionMapUVSpeed",
     "_EnemyHitFlashBrightColor", "_EnemyHitFlashFresnelColor",
     "_EnemyHitFlashBrightCenter",
@@ -706,6 +715,12 @@ def build_plan(name, guid, document, texture_exists, face_basis=None):
         if not tex:
             continue
         plan.param_jobs.append(TextureJob(tex, op, "param", sampler, prop))
+
+    # A few reference features have no toggle property at all -- the shader just
+    # samples the map when the material binds one. The GLSL needs a bool for
+    # that, so it is derived from whether the texture actually resolved.
+    for prop, uniform in TEXTURE_PRESENCE_BOOLS.items():
+        plan.uniforms[uniform] = bool(resolved.get(prop))
 
     # Any remaining bound texture with no destination at all: report it rather
     # than dropping it silently, so a new shader property surfaces instead of
