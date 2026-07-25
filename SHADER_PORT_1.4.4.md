@@ -40,6 +40,19 @@ keyword)。GLSL 现有的 `u_Pantyhose / _PantyhoseSpecularInt / _PantyhoseSpecu
 _PantyhoseAnisotropyDirection / _PantyhoseColor` 对 1.4.4 的 .mat **永远读不到值**,
 等于该功能整体失效。
 
+## 进度
+
+已移植(每条都按"只差一个 keyword 的变体对"逐指令追出来,再逐条译成 GLSL,
+默认值与取值范围一律取参考 Properties 原值):
+
+- [x] `_SILK_STOCKINGS` 丝袜全套(替换掉对 1.4.4 材质永远读不到值的 `_Pantyhose*`)
+- [x] `_ANISOTROPY_SPECULAR_ON` Standard 各向异性高光双瓣
+- [x] `_STYLIZED_FRESNEL` 风格化菲涅尔
+- [x] `_ENEMY_HIT_FLASH` 受击闪白
+
+顺带修掉的既有隐患:`_SRGB_COLOR_PROPS` 只按"名字以 Color 结尾"判断 Color 类型,
+而 `_AnisotropyColorAdditional` 是 Color 类型却不以 Color 结尾 —— 会丢 gamma。
+
 ## 要实现的清单（片元级,按影响排序）
 
 ### 基础 characternpr

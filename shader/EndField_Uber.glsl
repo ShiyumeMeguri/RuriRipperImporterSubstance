@@ -161,6 +161,36 @@
     uniform float _ClearCoatNormalMode;
   //- endregion
 
+  //- region EnemyHitFlash 受击闪白 (Standard/LiquidAg, keyword _ENEMY_HIT_FLASH)
+    // 1.4.4 新增。球形扫描线(世界坐标到中心的距离 remap)+ 独立法线强度的菲涅尔。
+    //: param custom { "default": false, "label": "启用受击闪白 _ENEMY_HIT_FLASH", "group": "9 EnemyHitFlash 受击闪白" }
+    uniform bool u_EnemyHitFlash;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "扫描线亮色 BrightColor (a=强度)", "widget":"color", "group": "9 EnemyHitFlash 受击闪白" }
+    uniform vec4 _EnemyHitFlashBrightColor;
+    //: param custom { "default": 1.0, "label": "亮色调整 BrightColorAdjust", "min": 0.0, "max": 10.0, "group": "9 EnemyHitFlash 受击闪白" }
+    uniform float _EnemyHitFlashBrightColorAdjust;
+    //: param custom { "default": 0.0, "label": "羽化内半径 InnerRadius", "min": 0.0, "max": 10.0, "group": "9 EnemyHitFlash 受击闪白" }
+    uniform float _EnemyHitFlashInnerRadius;
+    //: param custom { "default": 2.0, "label": "羽化外半径 OuterRadius", "min": 0.0, "max": 10.0, "group": "9 EnemyHitFlash 受击闪白" }
+    uniform float _EnemyHitFlashOuterRadius;
+    //: param custom { "default": [0.0, 0.0, 0.0, 0.0], "label": "覆盖中心 BrightCenter (w=1 用此坐标, w=0 用默认主角位置)", "group": "9 EnemyHitFlash 受击闪白" }
+    uniform vec4 _EnemyHitFlashBrightCenter;
+    //: param custom { "default": [1.0, 1.0, 1.0, 1.0], "label": "菲涅尔颜色 FresnelColor (a=混合量)", "widget":"color", "group": "9 EnemyHitFlash 受击闪白" }
+    uniform vec4 _EnemyHitFlashFresnelColor;
+    //: param custom { "default": 1.0, "label": "菲涅尔颜色调整 FresnelColorAdjust", "min": 0.0, "max": 10.0, "group": "9 EnemyHitFlash 受击闪白" }
+    uniform float _EnemyHitFlashFresnelColorAdjust;
+    //: param custom { "default": 0.0, "label": "菲涅尔 Bias", "min": -1.0, "max": 2.0, "group": "9 EnemyHitFlash 受击闪白" }
+    uniform float _EnemyHitFlashFresnelBias;
+    //: param custom { "default": 1.0, "label": "菲涅尔影响不透明度 FresnelAffectOpacity", "min": 0.0, "max": 1.0, "group": "9 EnemyHitFlash 受击闪白" }
+    uniform float _EnemyHitFlashFresnelAffectOpacity;
+    //: param custom { "default": 1.0, "label": "法线强度 NormalScale", "min": 0.0, "max": 3.0, "group": "9 EnemyHitFlash 受击闪白" }
+    uniform float _EnemyHitFlashNormalScale;
+    // [H15] 参考里这一项乘 _ExposureWithMiscParams.y(引擎全局曝光,不是材质属性),
+    // Painter 拿不到 → 滑条,默认 1.0 = 不额外缩放。
+    //: param custom { "default": 1.0, "label": "[H15] 闪白曝光 HitFlashExposure", "min": 0.0, "max": 10.0, "group": "9 EnemyHitFlash 受击闪白" }
+    uniform float f_HitFlashExposure;
+  //- endregion
+
   //- region StylizedFresnel 风格化菲涅尔 (Standard, keyword _STYLIZED_FRESNEL)
     // 1.4.4 新增。菲涅尔用的是**几何法线**(TEXCOORD_2,顶点法线插值),
     // 不是法线贴图后的 N —— 参考 _394 就是这么取的。
@@ -930,6 +960,46 @@
           silk_tint = lerp(_SilkStockingsDryColor.rgb, _SilkStockingsWetColor.rgb, wet);
       }
 
+      // ---- EnemyHitFlash 受击闪白 (_ENEMY_HIT_FLASH) ----
+      // 参考 Sub0_Pass0_Fragment_b475(ON) vs b373(OFF):
+      //   _2536 闪白专用法线:用 NormalScale 重建(与 _BumpScale 无关的另一份)
+      //   _2581 中心 = lerp(默认主角位置, BrightCenter.xyz, BrightCenter.w)
+      //   _2598 t = saturate((|pos-center| - Outer) / (Inner - Outer))
+      //   _2601 scan = smoothstep(t)
+      //   _2622 albedo += BrightColorAdjust * BrightColor.rgb * scan
+      //   _2650 fres = 1 - saturate(dot(V, faceSign*Nflash) + FresnelBias)
+      //   _3528 w = lerp(1, fres, FresnelAffectOpacity) * saturate(BrightColor.a * scan)
+      //   emission += w * lerp(albedo, FresnelColor.rgb*FresnelColorAdjust,
+      //                        FresnelColor.a * fres) * 曝光 [H15]
+      float hitFlashWeight = 0.0;
+      float3 hitFlashEmissive = float3(0.0);
+      if (u_EnemyHitFlash) {
+          float3 flashN = normalWS_raw;
+          if (u_UseBumpMap) {
+              flashN = SampleBumpNormal(inputs, normalWS_raw, tangentWS, faceSign,
+                                        _EnemyHitFlashNormalScale);
+          } else {
+              flashN = normalize(normalWS_raw);
+          }
+          // [H4] Painter 的模型即世界,没有"默认主角位置"这个引擎量 —— w=0 时退化
+          // 为世界原点,与参考里 VFXParams0 未设置时同值。
+          float3 flashCenter = _EnemyHitFlashBrightCenter.xyz * _EnemyHitFlashBrightCenter.w;
+          float flashDist = length(positionWS - flashCenter);
+          float flashT = clamp((flashDist - _EnemyHitFlashOuterRadius)
+                               / (_EnemyHitFlashInnerRadius - _EnemyHitFlashOuterRadius),
+                               0.0, 1.0);
+          float flashScan = (flashT * flashT) * mad(flashT, -2.0, 3.0);          // _2601
+          albedo += (_EnemyHitFlashBrightColorAdjust * flashScan) * _EnemyHitFlashBrightColor.rgb;
+          float flashFres = 1.0 - clamp(dot(V, faceSign * flashN)
+                                        + _EnemyHitFlashFresnelBias, 0.0, 1.0);  // _2650
+          hitFlashWeight = mad(flashFres, _EnemyHitFlashFresnelAffectOpacity,
+                               1.0 - _EnemyHitFlashFresnelAffectOpacity)
+                           * clamp(_EnemyHitFlashBrightColor.a * flashScan, 0.0, 1.0);  // _3528
+          hitFlashEmissive = lerp(albedo,
+                                  _EnemyHitFlashFresnelColor.rgb * _EnemyHitFlashFresnelColorAdjust,
+                                  _EnemyHitFlashFresnelColor.a * flashFres);      // _3500
+      }
+
       // ---- StylizedFresnel (_STYLIZED_FRESNEL) ----
       // 参考 Sub0_Pass0_Fragment_b623(ON) vs b543(OFF), _422/_463..465/_3507:
       //   noise = tex(_NoiseMap, (uv + speed*time) * ST.xy + ST.zw).r
@@ -1387,6 +1457,9 @@
           // _3507 * _457..459 * _3141 —— Color.a 就是"自发光量"那一位。
           emissionContrib += (stylizedFresnelMask * _StylizedFresnelColor.a)
                              * _StylizedFresnelColor.rgb * alphaPremul;
+      }
+      if (u_EnemyHitFlash) {
+          emissionContrib += hitFlashWeight * hitFlashEmissive * f_HitFlashExposure;
       }
 
       // ==== FINAL ASSEMBLY ====
