@@ -227,9 +227,13 @@ class TextureBaker:
         if guid in self._source_cache:
             return self._source_cache[guid]
         payload = None
-        png_bytes = getattr(self.db, "png_bytes", None)
-        if callable(png_bytes):
-            payload = png_bytes(guid)
+        # Bridge mode hands over the asset's own exported bytes in whatever
+        # container AssetRipper chose (png/tga/exr/...); decode_image sniffs the
+        # format, so nothing here needs to know which. Absence of the method is
+        # what marks the disk database, whose sources are files on disk.
+        texture_bytes = getattr(self.db, "texture_bytes", None)
+        if callable(texture_bytes):
+            payload = texture_bytes(guid)
         if payload is None:
             path = self.db.resolve_guid(guid)
             if path and os.path.isfile(path):

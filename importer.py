@@ -105,8 +105,8 @@ def prepare(job, progress=None):
             return False
         if job.db.resolve_guid(guid):
             return True
-        png_bytes = getattr(job.db, "png_bytes", None)
-        return bool(callable(png_bytes) and png_bytes(guid))
+        texture_bytes = getattr(job.db, "texture_bytes", None)
+        return bool(callable(texture_bytes) and texture_bytes(guid))
 
     step("Planning materials...")
     for set_name, entry in job.build.materials.items():
@@ -241,9 +241,11 @@ def jobs_from_cabs(bridge, cab_names, progress=None):
         progress("Resolving dependency closure...")
     # clips_by_cab is the animation half of the export -- Painter has no
     # animation surface, so it is deliberately unused here.
-    documents, textures, roots, seed_roots, _clips_by_cab, scene_roots = \
-        bridge.import_cabs(cab_names)
-    db = bridge_asset_db.BridgeAssetDatabase(documents, textures)
+    assets, roots, seed_roots, _clips_by_cab, scene_roots = bridge.import_cabs(cab_names)
+    # One guid -> bytes map for the whole closure, whatever container AssetRipper
+    # wrote each asset in; the database decodes on demand (a character's textures
+    # come out as TGA, not PNG, and nothing here may assume either).
+    db = bridge_asset_db.BridgeAssetDatabase(assets)
     options = config.import_options()
 
     # A scene row imports exactly its OWN root (a level's closure drags in every
