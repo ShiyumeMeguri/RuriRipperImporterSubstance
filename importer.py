@@ -244,8 +244,9 @@ def jobs_from_cabs(bridge, cab_names, progress=None):
     assets, roots, seed_roots, _clips_by_cab, scene_roots = bridge.import_cabs(cab_names)
     # One guid -> bytes map for the whole closure, whatever container AssetRipper
     # wrote each asset in; the database decodes on demand (a character's textures
-    # come out as TGA, not PNG, and nothing here may assume either).
-    db = bridge_asset_db.BridgeAssetDatabase(assets)
+    # come out as TGA, not PNG, and nothing here may assume either). Mesh raw
+    # blobs ride along so geometry decode never touches YAML text (MeshRawBlob).
+    db = bridge_asset_db.BridgeAssetDatabase(assets, mesh_blobs=bridge.mesh_blobs_by_guid)
     options = config.import_options()
 
     # A scene row imports exactly its OWN root (a level's closure drags in every
