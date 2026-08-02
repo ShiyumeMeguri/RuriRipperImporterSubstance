@@ -1199,6 +1199,11 @@
       return textureLod(_RampMap, float2(clamp(u, halfTexel, 1.0 - halfTexel), 0.5), 0.0);
   }
 
+  // 关 ramp 时各部位的程序化 ramp 都以这条三次曲线收尾 (源逐处均为 x*x*(3-2x))
+  float RampSmooth(float t) {
+      return (t * t) * (3.0 - 2.0 * t);
+  }
+
   // ---- Unity uv (含 _BaseMap_ST) ----
   float2 GetBaseUV(V2F inputs) {
       return inputs.sparse_coord.tex_coord * _BaseMap_ST.xy + _BaseMap_ST.zw;
@@ -1827,11 +1832,15 @@
           float4 viewRampSmp = SampleRamp(viewRampU);
           viewRampA = viewRampSmp.a;
       } else {
+          // 关 _DIFF_RAMP_ON 时参考不是软 lambert, 而是程序化硬 ramp:
+          // 把 [0.25, 1] 重映射到 [0, 1] 再走三次曲线, 下面 5/8 段全暗。
+          // 源 characternpr b363 _2862/_2865 (rampA) 与 _2875/_2878 (viewRampA)。
           rampCol = float3(1.0);
-          rampA = saturate(modNdotL * 0.5 + 0.5);
+          rampA = RampSmooth(max((clamp(_CharacterParams11.w * _CharacterParams12.x + modNdotL, -1.0, 1.0) - 0.25)
+                                 * 1.33333337306976318359375, 0.0));
           rampChroma = 0.0;
           rampChromaInv = 1.0;
-          viewRampA = 0.0;
+          viewRampA = RampSmooth(clamp((dot(N, camFwd) - 0.25) * 1.33333337306976318359375, 0.0, 1.0));
       }
 
       // ---- Shadow terms ----
@@ -2376,12 +2385,13 @@
       float geomNdotL = dot(N, adjustedLightDir);
       float clampedNdotL = clamp(_CharacterParams11.w * _CharacterParams12.x + geomNdotL, -1.0, 1.0);
 
-      float rampInput;
+      float rampSelector;
       if (u_UseSDFLightmap) {
-          rampInput = lerp(sdfNdotL, clampedNdotL, sdfMask.y) * 0.5 + 0.5;
+          rampSelector = lerp(sdfNdotL, clampedNdotL, sdfMask.y);
       } else {
-          rampInput = clampedNdotL * 0.5 + 0.5;
+          rampSelector = clampedNdotL;
       }
+      float rampInput = rampSelector * 0.5 + 0.5;
 
       float3 rampCol; float rampA; float rampChroma; float rampChromaInv;
       if (u_UseDiffRamp) {
@@ -2391,8 +2401,11 @@
           rampChroma = max(rampCol.r, max(rampCol.g, rampCol.b)) - min(rampCol.r, min(rampCol.g, rampCol.b));
           rampChromaInv = 1.0 - rampChroma;
       } else {
+          // 脸部的程序化 ramp 与身体不同口径: +0.5 后 saturate 再走三次曲线,
+          // 过渡带更宽 (源 characternpr_skin b97 _2802/_2805)。
+          // 参考没有 SDF 开 + ramp 关 的变体, 这里沿用同一个 selector。
           rampCol = float3(1.0);
-          rampA = 1.0;
+          rampA = RampSmooth(saturate(rampSelector + 0.5));
           rampChroma = 0.0;
           rampChromaInv = 1.0;
       }
@@ -2721,8 +2734,8 @@
 
       // ==== DIFFUSE RAMP ====
       float3 rampCol; float rampA; float viewRampA;
+      float rampNdotL = dot(lightN, projLight);
       if (u_UseDiffRamp) {
-          float rampNdotL = dot(lightN, projLight);
           float rampInput = clamp(_CharacterParams11.w * _CharacterParams12.x + rampNdotL, -1.0, 1.0) * 0.5 + 0.5;
           float4 rampSmp = SampleRamp(rampInput);
           rampCol = rampSmp.rgb;
@@ -2732,9 +2745,12 @@
           float4 viewRampSmp = SampleRamp(viewRampInput);
           viewRampA = viewRampSmp.a;
       } else {
+          // 关 _DIFF_RAMP_ON 时参考走程序化硬 ramp, 与身体同口径但不带 wrap 项
+          // (源 characternpr_eye b25 _1107/_1110 与 _1124/_1125·_1126)。
           rampCol = float3(1.0);
-          rampA = 1.0;
-          viewRampA = 0.0;
+          rampA = RampSmooth(max((clamp(_CharacterParams11.w * _CharacterParams12.x + rampNdotL, -1.0, 1.0) - 0.25)
+                                 * 1.33333337306976318359375, 0.0));
+          viewRampA = RampSmooth(clamp((dot(lightN, camFwd) - 0.25) * 1.33333337306976318359375, 0.0, 1.0));
       }
 
       float rampChroma = max(rampCol.r, max(rampCol.g, rampCol.b))
@@ -3015,11 +3031,14 @@
           float4 viewRampSmp = SampleRamp(viewRampU);
           viewRampA = viewRampSmp.a;
       } else {
+          // 关 _DIFF_RAMP_ON 时参考走程序化硬 ramp, 与身体同一口径
+          // (源 characternpr_hair b101 _2808/_2811 与 _2821/_2824)。
           rampCol = float3(1.0);
-          rampA = saturate(modNdotL * 0.5 + 0.5);
+          rampA = RampSmooth(max((clamp(_CharacterParams11.w * _CharacterParams12.x + modNdotL, -1.0, 1.0) - 0.25)
+                                 * 1.33333337306976318359375, 0.0));
           rampChroma = 0.0;
           rampChromaInv = 1.0;
-          viewRampA = 0.0;
+          viewRampA = RampSmooth(clamp((dot(N, camFwd) - 0.25) * 1.33333337306976318359375, 0.0, 1.0));
       }
 
       // ---- Shadow terms (charShadow=1: minShadow 不乘 castShadow) ----
@@ -3413,11 +3432,15 @@
           float4 viewRampSmp = SampleRamp(viewRampU);
           viewRampA = viewRampSmp.a;
       } else {
+          // Fur 的 48 个片元变体全部带 _DIFF_RAMP_ON, 参考没有 OFF 变体;
+          // Fur 是 characternpr 的一个 keyword 分支, ramp 链结构与身体逐指令同形,
+          // 故沿用同 shader 的 OFF 分支 (源 characternpr b363 _2862/_2865 与 _2875/_2878)。
           rampCol = float3(1.0);
-          rampA = saturate(modNdotL * 0.5 + 0.5);
+          rampA = RampSmooth(max((clamp(_CharacterParams11.w * _CharacterParams12.x + modNdotL, -1.0, 1.0) - 0.25)
+                                 * 1.33333337306976318359375, 0.0));
           rampChroma = 0.0;
           rampChromaInv = 1.0;
-          viewRampA = 0.0;
+          viewRampA = RampSmooth(clamp((dot(N, camFwd) - 0.25) * 1.33333337306976318359375, 0.0, 1.0));
       }
 
       // ---- Shadow terms (charShadow=1, furShadowMask) ----
