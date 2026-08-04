@@ -29,7 +29,7 @@ except ImportError:  # standalone (non-package) testing
 _DEFAULTS = {
     # Folder that directly contains Ruri.RipperHook.dll AND
     # Ruri.RipperHook.CLI.runtimeconfig.json, e.g.
-    # <Ruri-RipperHook checkout>/AssetRipper/Source/0Bins/AssetRipper/Debug
+    # <Ruri-RipperHook checkout>/AssetRipper/Source/0Bins/AssetRipper/Release
     "ripperhook_bin": "",
     # Game install root scanned when building a cabmap.
     "game_root": "",
