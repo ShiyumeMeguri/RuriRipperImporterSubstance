@@ -226,21 +226,33 @@ class TextureBaker:
     def _source(self, guid):
         if guid in self._source_cache:
             return self._source_cache[guid]
-        payload = None
-        # Bridge mode hands over the asset's own exported bytes in whatever
-        # container AssetRipper chose (png/tga/exr/...); decode_image sniffs the
-        # format, so nothing here needs to know which. Absence of the method is
-        # what marks the disk database, whose sources are files on disk.
+
+        # Two places an image can come from, and BOTH are tried: bridge mode
+        # hands over the asset's own exported bytes in whatever container
+        # AssetRipper chose (png/tga/exr/...), while a disk database resolves the
+        # guid to a file. Trying them in turn rather than stopping at the first
+        # that returns SOMETHING matters, because the bridge answers for every
+        # guid -- an asset that is not an exported image comes back as its YAML
+        # (or shader source) bytes, which decode to nothing. Stopping there left
+        # the file on disk unread and reported the texture as undecodable.
+        attempts = []
         texture_bytes = getattr(self.db, "texture_bytes", None)
         if callable(texture_bytes):
-            payload = texture_bytes(guid)
-        if payload is None:
-            path = self.db.resolve_guid(guid)
-            if path and os.path.isfile(path):
-                payload = path
-        rgba = decode_image(payload) if payload is not None else None
+            attempts.append(("bridge", texture_bytes(guid)))
+        path = self.db.resolve_guid(guid)
+        if path and os.path.isfile(path):
+            attempts.append(("file", path))
+
+        rgba = None
+        for _origin, payload in attempts:
+            if payload is None:
+                continue
+            rgba = decode_image(payload)
+            if rgba is not None:
+                break
         if rgba is None:
-            self.warnings.append("texture {0} could not be decoded".format(guid[:8]))
+            self.warnings.append("texture {0} could not be decoded ({1})".format(
+                guid[:8], _describe_sources(attempts) or "no source at all"))
         self._source_cache[guid] = rgba
         return rgba
 
@@ -278,6 +290,38 @@ class TextureBaker:
             produced[job.target] = path
             self.written += 1
         return produced
+
+
+# Container signatures, so a texture that fails to decode says WHAT it was
+# rather than only that it failed. Qt reads png/jpg/bmp/gif/tga; a payload that
+# turns out to be YAML or shader source is an asset that was never an image,
+# and a dds/ktx one is a container Qt has no codec for -- different problems
+# with different fixes, and the message now tells them apart.
+_SIGNATURES = (
+    (b"\x89PNG\r\n\x1a\n", "png"),
+    (b"\xff\xd8\xff", "jpeg"),
+    (b"DDS ", "dds"),
+    (b"\xabKTX", "ktx"),
+    (b"v/1\x01", "exr"),
+    (b"%YAML", "yaml, not an image"),
+)
+
+
+def _describe_sources(attempts):
+    """One phrase per source that was tried, naming what it actually held."""
+    parts = []
+    for origin, payload in attempts:
+        if payload is None:
+            parts.append("{0}: nothing".format(origin))
+            continue
+        if isinstance(payload, str):
+            parts.append("{0}: {1}".format(origin, os.path.basename(payload)))
+            continue
+        head = bytes(payload[:8])
+        kind = next((name for magic, name in _SIGNATURES if head.startswith(magic)),
+                    "unknown 0x" + head[:4].hex())
+        parts.append("{0}: {1} bytes of {2}".format(origin, len(payload), kind))
+    return "; ".join(parts)
 
 
 _UNSAFE = set('<>:"/\\|?*')
