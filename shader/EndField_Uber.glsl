@@ -1237,7 +1237,7 @@
                                 : (_OutlineColorSaturation * (ob - oLum) + oLum);
   }
 
-  // 亮度/饱和度阴影色 (LUT 关闭分支, Cloth/Hair/Fur/Eye 用; Face 的 #else 是纯白, 不走这里)
+  // 亮度/饱和度阴影色 (LUT 关闭分支, Cloth/Face/Hair/Fur/Eye 全部同一公式)
   float3 ComputeShadowColorBrightSat(float3 albedo) {
       float3 shadBright = albedo * _ShadowColorBrightness;
       float shadLum = dot(shadBright, LUM);
@@ -2163,7 +2163,6 @@
 //----------------------------------------------------------------------region Part 1 Face — HGRP_CharacterNPR_Skin_Fix.shader computeNPRLighting 逐行移植
 //- {
   // SDF Mask / SDF Lightmap = 贴图参数 (RGBA 完整 + 镜像 UV 采样需任意 UV)。
-  // Face 的 LUT-off 阴影色是"纯白" (shadowLut = oneMinusRefl), 与其他部位不同 — 逐行保留。
   // castShadow: SDF on → 1.0 (HGRP 同); off → shadowAtten=1 [H2] 时 smoothstep(1)=1。
   float3 shadeFace(V2F inputs, float3 positionWS, float3 normalWS_raw, float4 tangentWS, float faceSign, float3 albedo, float baseAlpha) {
       float2 uv = GetBaseUV(inputs);
@@ -2307,12 +2306,18 @@
       float dielSpec = specScale * 0.04;
       float3 specColor = _Metallic * (rimAlbedo - dielSpec) + dielSpec;
 
-      // ---- Shadow LUT (Face: LUT-off = 纯白 oneMinusRefl) ----
+      // ---- Shadow LUT / 阴影色 (与其余部位同一口径) ----
+      // 源 characternpr_skin b129 _443/_447/_1383:
+      //   _443 = albedo * _ShadowColorBrightness
+      //   _447 = lerp(dot(_443, LUM), _443, _ShadowColorSaturation)
+      //   _1383 = _447 * (0.96 - metallic*0.96)
+      // b111(带 FaceDecal 的 _CUSTOMIZE_AVATAR 变体) _528/_533/_537 同序:
+      // 贴花先混进 albedo, 阴影色再从混合后的 albedo 取。
       float3 shadowLut;
       if (u_UseShadowLut) {
           shadowLut = oneMinusRefl * SampleShadowLutColor(albedo);
       } else {
-          shadowLut = float3(oneMinusRefl);
+          shadowLut = oneMinusRefl * ComputeShadowColorBrightSat(albedo);
       }
 
       float roughness = max(roughnessRaw * roughnessRaw, 0.0078125);
