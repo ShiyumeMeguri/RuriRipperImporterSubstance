@@ -88,6 +88,11 @@ def start_plugin():
     pythonnet_bridge.set_bin_dir_hint(
         "Set it in the RuriRipper panel's 'RipperHook bin' field, or set the "
         "RURI_RIPPERHOOK_BIN environment variable.")
+    # THIS host's image capability: Painter decodes through Qt, which ships no
+    # tga/exr codec. Declaring it here makes the bridge convert exactly the
+    # textures Qt cannot read and hand every other one over byte-identical to
+    # the game's own container. Blender declares nothing and gets raw tga/exr.
+    pythonnet_bridge.set_texture_formats(("png", "jpeg", "bmp"))
 
     # Claim the process-wide CLR runtime (CoreCLR) as early as possible, before
     # any other plugin in python/plugins gets a chance to trigger its own lazy
