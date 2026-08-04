@@ -246,7 +246,8 @@ def jobs_from_cabs(bridge, cab_names, progress=None):
     # wrote each asset in; the database decodes on demand (a character's textures
     # come out as TGA, not PNG, and nothing here may assume either). Mesh raw
     # blobs ride along so geometry decode never touches YAML text (MeshRawBlob).
-    db = bridge_asset_db.BridgeAssetDatabase(assets, mesh_blobs=bridge.mesh_blobs_by_guid)
+    db = bridge_asset_db.BridgeAssetDatabase(assets, mesh_blobs=bridge.mesh_blobs_by_guid,
+                                             asset_paths=bridge.asset_paths_by_guid)
     options = config.import_options()
 
     # A scene row imports exactly its OWN root (a level's closure drags in every

@@ -251,8 +251,12 @@ class TextureBaker:
             if rgba is not None:
                 break
         if rgba is None:
+            # Name the texture the way the game does; the guid is only who it is
+            # when the closure genuinely has no path for it.
+            asset_name = getattr(self.db, "asset_name", None)
+            label = (asset_name(guid) if callable(asset_name) else None) or guid[:8]
             self.warnings.append("texture {0} could not be decoded ({1})".format(
-                guid[:8], _describe_sources(attempts) or "no source at all"))
+                label, _describe_sources(attempts) or "no source at all"))
         self._source_cache[guid] = rgba
         return rgba
 
