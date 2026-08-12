@@ -25,7 +25,7 @@ PLUGIN = ("D:/Tools/Users/Administrator/Documents/Adobe/Adobe Substance 3D Paint
           "python/plugins/RuriRipperImporterSubstance")
 GLSL = os.path.join(PLUGIN, "shader", "EndField_Uber.glsl")
 
-# Import unity_material standalone (it only needs ruri_pybridge on sys.path).
+# Import unity_material standalone (it only needs RuriRipperPyBridge on sys.path).
 sys.path.insert(0, PLUGIN)
 spec = importlib.util.spec_from_file_location("unity_material",
                                               os.path.join(PLUGIN, "unity_material.py"))

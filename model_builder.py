@@ -22,13 +22,13 @@ import numpy as np
 
 try:
     from . import gltf_writer
-    from .ruri_pybridge.math3d import coordinate as _coordinate
-    from .ruri_pybridge.unity import (hierarchy, material as unity_material_props,
+    from .RuriRipperPyBridge.math3d import coordinate as _coordinate
+    from .RuriRipperPyBridge.unity import (hierarchy, material as unity_material_props,
                                       mesh_decoder, prefab as prefab_scan, skinning)
 except ImportError:  # standalone (non-package) testing
     import gltf_writer
-    from ruri_pybridge.math3d import coordinate as _coordinate
-    from ruri_pybridge.unity import (hierarchy, material as unity_material_props,
+    from RuriRipperPyBridge.math3d import coordinate as _coordinate
+    from RuriRipperPyBridge.unity import (hierarchy, material as unity_material_props,
                                      mesh_decoder, prefab as prefab_scan, skinning)
 
 # Unity -> glTF: negate X, flip V, re-wind faces, keep tangent handedness. All
@@ -415,7 +415,7 @@ def build_from_prefab(db, prefab, name, out_path, options=None):
 
     # Which renderers actually draw -- LODGroup levels, ShadowsOnly proxies,
     # disabled/inactive GameObjects and static-batch windows -- is decided by the
-    # shared rules (ruri_pybridge.unity.prefab), so this plugin and the Blender
+    # shared rules (RuriRipperPyBridge.unity.prefab), so this plugin and the Blender
     # add-on cannot disagree about what a prefab contains.
     stats = prefab_scan.SkipStats()
     for renderer in prefab_scan.iter_renderers(prefab, go_to_node, options, stats):

@@ -49,7 +49,7 @@ if _HERE not in sys.path:
 # config is stdlib-only, and the bootstrap must know where the workspace is
 # before it can find (or install) the private runtime folder.
 from . import config  # noqa: E402
-from .ruri_pybridge.runtime import bootstrap, pythonnet_bridge  # noqa: E402
+from .RuriRipperPyBridge.runtime import bootstrap, pythonnet_bridge  # noqa: E402
 
 config.activate_workspace()
 bootstrap.activate()  # must precede the numpy-dependent imports
@@ -174,7 +174,7 @@ def reload_plugin():
     # Shared package first (sys.modules order puts parents before children), so
     # the plugin modules reloaded after it pick up the new objects rather than
     # holding references to the previous generation.
-    shared_prefix = __name__ + ".ruri_pybridge."
+    shared_prefix = __name__ + ".RuriRipperPyBridge."
     for name, module in list(sys.modules.items()):
         if name.startswith(shared_prefix) and not name.endswith(_STATEFUL_SHARED):
             importlib.reload(module)

@@ -1,7 +1,7 @@
 """This plugin's settings: WHICH keys exist and what they mean.
 
 The store itself (defaults, unknown-key rejection, versioned repair, atomic
-writes) is ``ruri_pybridge.runtime.settings`` -- none of that is
+writes) is ``RuriRipperPyBridge.runtime.settings`` -- none of that is
 Painter-specific. What is Painter-specific is everything below: the key set, and
 where the workspace lives (the user's Painter resources directory, never inside
 this package, which is a checkout that gets replaced wholesale).
@@ -20,11 +20,11 @@ from __future__ import annotations
 import os
 
 try:
-    from .ruri_pybridge.runtime import settings as _settings
-    from .ruri_pybridge.runtime import workspace as _workspace
+    from .RuriRipperPyBridge.runtime import settings as _settings
+    from .RuriRipperPyBridge.runtime import workspace as _workspace
 except ImportError:  # standalone (non-package) testing
-    from ruri_pybridge.runtime import settings as _settings
-    from ruri_pybridge.runtime import workspace as _workspace
+    from RuriRipperPyBridge.runtime import settings as _settings
+    from RuriRipperPyBridge.runtime import workspace as _workspace
 
 _DEFAULTS = {
     # Folder that directly contains Ruri.RipperHook.dll AND

@@ -26,9 +26,9 @@ plugin's own channel/param maps -- the shader consuming them is unchanged.
 from __future__ import annotations
 
 try:
-    from .ruri_pybridge.unity import material as unity_props
+    from .RuriRipperPyBridge.unity import material as unity_props
 except ImportError:  # standalone (non-package) testing
-    from ruri_pybridge.unity import material as unity_props
+    from RuriRipperPyBridge.unity import material as unity_props
 
 PART_NAMES = {
     0: "Standard", 1: "Face", 2: "Eyes", 3: "Hair",
@@ -749,7 +749,7 @@ def build_plan(name, guid, document, texture_exists, face_basis=None):
     plan = MaterialPlan(name, guid)
     # Reading the .mat -- Unity's three property-table serialisations, m_Ints
     # merged under m_Floats, tiling/offset, active keywords -- is shared with the
-    # Blender add-on (ruri_pybridge.unity.material); only what follows is
+    # Blender add-on (RuriRipperPyBridge.unity.material); only what follows is
     # EndField_Uber-specific.
     props = unity_props.parse_material(document)
     textures, floats, colors, texture_st = (

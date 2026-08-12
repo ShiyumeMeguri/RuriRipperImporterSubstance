@@ -28,14 +28,14 @@ import substance_painter.project
 
 try:
     from . import config, model_builder, sp_apply, texture_pipeline, unity_material
-    from .ruri_pybridge.unity import asset_db, bridge_asset_db
+    from .RuriRipperPyBridge.unity import asset_db, bridge_asset_db
 except ImportError:  # standalone (non-package) testing
     import config
     import model_builder
     import sp_apply
     import texture_pipeline
     import unity_material
-    from ruri_pybridge.unity import asset_db, bridge_asset_db
+    from RuriRipperPyBridge.unity import asset_db, bridge_asset_db
 
 
 class ImportJob:

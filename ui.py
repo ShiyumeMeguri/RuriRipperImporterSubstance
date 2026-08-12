@@ -29,11 +29,11 @@ except ImportError:  # older Painter builds
 
 try:
     from . import config, sp_apply
-    from .ruri_pybridge.runtime import bootstrap
+    from .RuriRipperPyBridge.runtime import bootstrap
 except ImportError:  # standalone (non-package) testing
     import config
     import sp_apply
-    from ruri_pybridge.runtime import bootstrap
+    from RuriRipperPyBridge.runtime import bootstrap
 
 # Three columns only: a docked side panel has no room for the Container path,
 # which lives in each row's tooltip instead.
@@ -58,10 +58,10 @@ def _load_deps():
     try:
         try:
             from . import importer as _importer
-            from .ruri_pybridge.session import cabmap_state as _state
+            from .RuriRipperPyBridge.session import cabmap_state as _state
         except ImportError:  # standalone (non-package) testing
             import importer as _importer
-            from ruri_pybridge.session import cabmap_state as _state
+            from RuriRipperPyBridge.session import cabmap_state as _state
     except ImportError:
         return False
     cabmap_state, importer = _state, _importer
@@ -726,9 +726,9 @@ class RuriRipperPanel(QtWidgets.QWidget):
             return
         self._save_settings()
         try:
-            from .ruri_pybridge.runtime import pythonnet_bridge
+            from .RuriRipperPyBridge.runtime import pythonnet_bridge
         except ImportError:  # standalone (non-package) testing
-            from ruri_pybridge.runtime import pythonnet_bridge
+            from RuriRipperPyBridge.runtime import pythonnet_bridge
 
         def work(_progress):
             pythonnet_bridge.set_bin_dir(config.get("ripperhook_bin", ""))
