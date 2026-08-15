@@ -60,7 +60,7 @@
       },
       {
         "name": "_AnisotropyColor2",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -105,13 +105,13 @@
       },
       {
         "name": "_BaseColor",
-        "type": "half4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
         "name": "_BaseMap_ST",
-        "type": "half4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_Bi_Disturb",
@@ -125,17 +125,17 @@
       },
       {
         "name": "_BlendTexUVRotateMat",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_BlendTexUVSpeed",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_BlendTexUVWeights",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
@@ -145,97 +145,97 @@
       },
       {
         "name": "_BlendTex_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_BlendTint",
-        "type": "float4",
+        "type": "vec4",
         "widget": "HDRColor"
       },
       {
         "name": "_BumpScale",
-        "type": "half",
+        "type": "float",
         "widget": "Float"
       },
       {
         "name": "_CharacterParams0",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams1",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams10",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams11",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams12",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams13",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams14",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams15",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams2",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams3",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams4",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams5",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams6",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams7",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams8",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_CharacterParams9",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
@@ -245,7 +245,7 @@
       },
       {
         "name": "_ClearCoatColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -270,7 +270,7 @@
       },
       {
         "name": "_ColorAdjustmentColorBlend",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -280,7 +280,7 @@
       },
       {
         "name": "_ColorAdjustmentRimColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -305,7 +305,7 @@
       },
       {
         "name": "_Cutoff",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
@@ -320,8 +320,8 @@
       },
       {
         "name": "_DisturbTex1_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_DisturbUIntensity1",
@@ -330,17 +330,17 @@
       },
       {
         "name": "_DisturbUVRotateMat1",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_DisturbUVSpeed1",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_DisturbUVWeights1",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
@@ -355,17 +355,17 @@
       },
       {
         "name": "_EmissionColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
         "name": "_EmotionBlend",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
         "name": "_EmotionIndex",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
@@ -375,8 +375,8 @@
       },
       {
         "name": "_EnableNormalMap",
-        "type": "half",
-        "widget": "ToggleUI"
+        "type": "float",
+        "widget": "Toggle"
       },
       {
         "name": "_EnableVFXColorAdjustment",
@@ -385,12 +385,12 @@
       },
       {
         "name": "_EnvironmentGlobalParams0",
-        "type": "half4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_ExposureParams",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
@@ -400,17 +400,17 @@
       },
       {
         "name": "_EyeHighLightColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "HDRColor"
       },
       {
         "name": "_EyeScatteringColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "HDRColor"
       },
       {
         "name": "_EyeTintColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -420,7 +420,7 @@
       },
       {
         "name": "_FaceForward",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
@@ -430,37 +430,37 @@
       },
       {
         "name": "_FaceRight",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_FaceRimOffScale",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
         "name": "_FresnelAffectOpacity",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
         "name": "_FresnelBias",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
         "name": "_FresnelColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
         "name": "_FresnelFlip",
-        "type": "half",
+        "type": "float",
         "widget": "ToggleUI"
       },
       {
         "name": "_FresnelPower",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
@@ -495,8 +495,8 @@
       },
       {
         "name": "_FurDyeMap_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_FurEdgeFade",
@@ -505,8 +505,8 @@
       },
       {
         "name": "_FurMap_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_FurNoise",
@@ -525,12 +525,12 @@
       },
       {
         "name": "_HairDarkenParams",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_HighlightMapVector",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
@@ -555,8 +555,8 @@
       },
       {
         "name": "_LineMap_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_LineRange",
@@ -574,23 +574,18 @@
         "widget": "Range"
       },
       {
-        "name": "_MainLightLayerMask",
-        "type": "uint",
-        "widget": ""
-      },
-      {
         "name": "_MainTexUVRotateMat",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_MainTexUVSpeed",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_MainTexUVWeights",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
@@ -600,22 +595,22 @@
       },
       {
         "name": "_MainTex_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_MaskTexUVRotateMat",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_MaskTexUVSpeed",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_MaskTexUVWeights",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
@@ -625,12 +620,12 @@
       },
       {
         "name": "_MaskTex_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_MatcapColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "HDRColor"
       },
       {
@@ -640,12 +635,12 @@
       },
       {
         "name": "_Metallic",
-        "type": "half",
-        "widget": ""
+        "type": "float",
+        "widget": "Range"
       },
       {
         "name": "_MetallicIntensity",
-        "type": "half",
+        "type": "float",
         "widget": "Float"
       },
       {
@@ -670,28 +665,28 @@
       },
       {
         "name": "_NormalMapUVRotateMat",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_NormalMapUVSpeed",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_NormalMapUVWeights",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_NormalMapUseDisturb",
         "type": "float",
-        "widget": ""
+        "widget": "Float"
       },
       {
         "name": "_NormalMap_ST",
-        "type": "half4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_NormalScale",
@@ -700,22 +695,22 @@
       },
       {
         "name": "_OcclusionIntensity",
-        "type": "half",
+        "type": "float",
         "widget": "Float"
       },
       {
         "name": "_OutlineColorBrightness",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
         "name": "_OutlineColorSaturation",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
         "name": "_OutlineTintColor",
-        "type": "half4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -725,13 +720,13 @@
       },
       {
         "name": "_ParallaxColor",
-        "type": "half4",
+        "type": "vec4",
         "widget": "HDRColor"
       },
       {
         "name": "_ParallaxMarchNum",
-        "type": "half",
-        "widget": ""
+        "type": "float",
+        "widget": "Range"
       },
       {
         "name": "_ParallaxScale",
@@ -740,32 +735,32 @@
       },
       {
         "name": "_ParallaxTex_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_RoughnessIntensity",
-        "type": "half",
+        "type": "float",
         "widget": "Float"
       },
       {
         "name": "_RuriCharacterEnvironmentEffect",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_RuriCharacterEnvironmentWater",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "_RuriOutlineShellGate",
         "type": "bool",
-        "widget": ""
+        "widget": "Toggle"
       },
       {
         "name": "_SDFRimColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -795,12 +790,12 @@
       },
       {
         "name": "_SilkStockingsColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
         "name": "_SilkStockingsDryColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -835,17 +830,17 @@
       },
       {
         "name": "_SilkStockingsWetColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
         "name": "_SkinRimOffScale",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
         "name": "_Smoothness",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
@@ -865,12 +860,12 @@
       },
       {
         "name": "_Specular",
-        "type": "half",
+        "type": "float",
         "widget": "Range"
       },
       {
         "name": "_SpecularIntensity",
-        "type": "half",
+        "type": "float",
         "widget": "Float"
       },
       {
@@ -880,8 +875,8 @@
       },
       {
         "name": "_StrokeMap_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_StrokeOn",
@@ -900,7 +895,7 @@
       },
       {
         "name": "_TintColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Color"
       },
       {
@@ -950,8 +945,8 @@
       },
       {
         "name": "_UseFresnel",
-        "type": "half",
-        "widget": "ToggleUI"
+        "type": "bool",
+        "widget": "Toggle"
       },
       {
         "name": "_UseGrayAsAlpha",
@@ -1030,12 +1025,12 @@
       },
       {
         "name": "_VFXBlendTint",
-        "type": "float4",
+        "type": "vec4",
         "widget": "HDRColor"
       },
       {
         "name": "_VFXColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "HDRColor"
       },
       {
@@ -1060,7 +1055,7 @@
       },
       {
         "name": "_VFXFresnelColor",
-        "type": "float4",
+        "type": "vec4",
         "widget": "HDRColor"
       },
       {
@@ -1080,23 +1075,23 @@
       },
       {
         "name": "_VFXSpecialBlendTex_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_VFXSpecialMainTex_ST",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       },
       {
         "name": "_VFXSpecialParam",
-        "type": "float4",
+        "type": "vec4",
         "widget": "Vector"
       },
       {
         "name": "unity_SpecCube0_HDR",
-        "type": "float4",
-        "widget": ""
+        "type": "vec4",
+        "widget": "Vector"
       }
     ]
   },
@@ -2963,28 +2958,26 @@
     "_ClearCoatMask:打包覆盖之外的 gba 位 → 余量原样槽位 _ClearCoatMask_gba",
     "_ParallaxTex:打包覆盖之外的 gba 位 → 余量原样槽位 _ParallaxTex_gba",
     "_SplitNormalMap:打包覆盖之外的 ba 位 → 余量原样槽位 _SplitNormalMap_ba",
+    "纹理形参特化:SampleNormal(_BumpMap) → SampleNormal_BumpMap(源纹理已拆进宿主通道,GLSL 无法把它当采样器传参)",
     "能力 MainLight(GetMainLight/0):@body 兑现(镜像体 + 引擎态)",
     "能力 ShadowAttenuation(MainLightRealtimeShadow/1):宿主无兑现 → 缺席值 1.0(Subsumed)",
     "能力 ScreenDepth(SampleSceneDepth/1):宿主无兑现 → 缺席值 0.0(Declared)",
-    "uniform _BaseMap_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _BlendTex_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _DisturbTex1_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _EnvironmentGlobalParams0:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _FurDyeMap_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _FurMap_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _LineMap_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _MainLightLayerMask:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _MainTex_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _MaskTex_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _Metallic:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _NormalMapUseDisturb:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _NormalMap_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _ParallaxMarchNum:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _ParallaxTex_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _RuriOutlineShellGate:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _StrokeMap_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _VFXSpecialBlendTex_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform _VFXSpecialMainTex_ST:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)",
-    "uniform unity_SpecCube0_HDR:无 [ShaderProperty] 标签 → 裸 uniform(导入器/脚本可设,面板不显)"
+    "uniform _BaseMap_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _BlendTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _DisturbTex1_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _FurDyeMap_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _FurMap_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _LineMap_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _MainLightLayerMask:uint 引擎位(SP 面板不认 uint、.mat 无 uint 覆写链)→ const 初始化器真值",
+    "uniform _MainTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _MaskTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _NormalMapUseDisturb:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _NormalMap_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _ParallaxTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _RuriOutlineShellGate:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _StrokeMap_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _VFXSpecialBlendTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _VFXSpecialMainTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform unity_SpecCube0_HDR:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)"
   ]
 }
