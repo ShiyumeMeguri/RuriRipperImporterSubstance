@@ -760,7 +760,7 @@ class RuriRipperPanel(QtWidgets.QWidget):
 
         def work(progress):
             progress("Scanning {0}...".format(game_root))
-            bridge = cabmap_state.ensure_bridge(hooks)
+            bridge = cabmap_state.ensure_bridge(hooks, game_root)
             code = bridge.build_cab_map(game_root, out_path)
             if code != 0:
                 raise RuntimeError("BuildCabMap returned {0}".format(code))
@@ -784,7 +784,7 @@ class RuriRipperPanel(QtWidgets.QWidget):
 
         def work(progress):
             progress("Loading {0}...".format(os.path.basename(path)))
-            bridge = cabmap_state.ensure_bridge(hooks)
+            bridge = cabmap_state.ensure_bridge(hooks, self.game_root.text().strip())
             bridge.load_cab_map(path)
             cabmap_state.load_rows()
             return len(cabmap_state.ROWS)
