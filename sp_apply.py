@@ -42,7 +42,7 @@ except ImportError:  # standalone (non-package) testing
     import config
     import unity_material
 
-SHADER_NAME = "EndField_Uber"
+SHADER_NAME = "Ruri_Endfield_Uber"
 FILL_LAYER_NAME = "RuriAutoTex"
 LOG_CHANNEL = "RuriRipper"
 

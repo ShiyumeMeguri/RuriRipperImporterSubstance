@@ -139,6 +139,9 @@ _OPS = {
 }
 
 
+_CHANNEL_INDEX = {"r": 0, "g": 1, "b": 2, "a": 3}
+
+
 def apply_op(op, rgba, flip_green=False):
     simple = _OPS.get(op)
     if simple is not None:
@@ -151,6 +154,20 @@ def apply_op(op, rgba, flip_green=False):
         return reconstruct_normal(rgba, flip_green=flip_green, use_ag=False, channels=(0, 1))
     if op == unity_material.OP_NORMAL_SPLIT_BA:
         return reconstruct_normal(rgba, flip_green=flip_green, use_ag=False, channels=(2, 3))
+    # Manifest-driven segment ops: "extract:<channels>" packs the named source
+    # channels, in order, into the output's first components; "invert:<channels>"
+    # is the same extract with 255-x applied. The channel letters come from the
+    # generator's projection manifest, so the vocabulary lives in one place.
+    for prefix, invert in (("extract:", False), ("invert:", True)):
+        if op.startswith(prefix):
+            picks = [_CHANNEL_INDEX[c] for c in op[len(prefix):]]
+            data = rgba[..., picks]
+            if invert:
+                data = (255 - data.astype(np.int16)).astype(np.uint8)
+            if data.shape[2] == 2:
+                pad = np.zeros(data.shape[:2] + (1,), np.uint8)
+                data = np.concatenate([data, pad], axis=2)
+            return np.ascontiguousarray(data[..., 0] if data.shape[2] == 1 else data)
     raise ValueError("unknown texture op: {0}".format(op))
 
 

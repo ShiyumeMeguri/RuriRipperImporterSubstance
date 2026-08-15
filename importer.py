@@ -27,10 +27,11 @@ import substance_painter.event
 import substance_painter.project
 
 try:
-    from . import config, model_builder, sp_apply, texture_pipeline, unity_material
+    from . import config, manifest_plan, model_builder, sp_apply, texture_pipeline, unity_material
     from .RuriRipperPyBridge.unity import asset_db, bridge_asset_db
 except ImportError:  # standalone (non-package) testing
     import config
+    import manifest_plan
     import model_builder
     import sp_apply
     import texture_pipeline
@@ -110,8 +111,8 @@ def prepare(job, progress=None):
 
     step("Planning materials...")
     for set_name, entry in job.build.materials.items():
-        plan = unity_material.build_plan(set_name, entry.guid, entry.document,
-                                         texture_exists, job.build.face_basis)
+        plan = manifest_plan.build_plan(set_name, entry.guid, entry.document,
+                                        texture_exists, job.build.face_basis)
         job.plans[set_name] = plan
         for warning in plan.warnings:
             job.report.append("!! " + warning)
